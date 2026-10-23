@@ -6,11 +6,13 @@ import type {
   Budget,
   Category,
   Goal,
+  ImportProfile,
   Investment,
   InvestmentTxn,
   Person,
   Price,
   Purpose,
+  Recurring,
   ReimbursementClaim,
   ReimbursementPolicy,
   Settings,
@@ -35,6 +37,8 @@ export interface Dataset {
   goals: Goal[];
   budgets: Budget[];
   events: AppEvent[];
+  recurring: Recurring[];
+  importProfiles: ImportProfile[];
 }
 
 export function useDataset(): Dataset | undefined {
@@ -55,6 +59,8 @@ export function useDataset(): Dataset | undefined {
       goals,
       budgets,
       events,
+      recurring,
+      importProfiles,
     ] = await Promise.all([
       db.settings.get('app'),
       db.accounts.toArray(),
@@ -71,6 +77,8 @@ export function useDataset(): Dataset | undefined {
       db.goals.toArray(),
       db.budgets.toArray(),
       db.events.toArray(),
+      db.recurring.toArray(),
+      db.importProfiles.toArray(),
     ]);
     return {
       settings: settings ?? null,
@@ -88,6 +96,8 @@ export function useDataset(): Dataset | undefined {
       goals,
       budgets,
       events,
+      recurring,
+      importProfiles,
     } satisfies Dataset;
   }, []);
 }

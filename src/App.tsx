@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppContext, type AppApi, type EditorArg, type QuickAddPrefill } from './app/context';
 import type { Page } from './app/nav';
 import { useDataset } from './db/hooks';
-import { ensureSeeded } from './db/repo';
+import { ensureSeeded, updateSettings } from './db/repo';
 import { datasetToEngineInput } from './app/useSnapshot';
-import { computeSnapshot } from './engine';
+import { computeSnapshot, buildNotifications } from './engine';
+import { NotificationBell } from './components/NotificationBell';
 import { useMarketPrices, mergePrices } from './app/market';
 import { setPendingTxnFilter } from './app/pendingFilter';
 import { resolveRange, startOfMonth, todayISO, type DateRange, type RangePreset } from './lib/dates';
@@ -12,6 +13,8 @@ import { Sidebar, MobileNav, TopBar, BootSplash } from './components/Shell';
 import { DateRangePicker } from './components/DateRangePicker';
 import { QuickAdd } from './components/quickadd/QuickAdd';
 import { TxnEditor } from './components/editor/TxnEditor';
+import { StatementImport } from './components/import/StatementImport';
+import { AiCategorize } from './components/ai/AiCategorize';
 import { ToastHost } from './app/toast';
 import { Onboarding } from './components/Onboarding';
 import Overview from './pages/Overview';
@@ -21,7 +24,7 @@ import Expenses from './pages/Expenses';
 import People from './pages/People';
 import Reimbursements from './pages/Reimbursements';
 import Investments from './pages/Investments';
-import { StubPage } from './pages/StubPage';
+import Reports from './pages/Reports';
 
 export default function App() {
   const dataset = useDataset();
@@ -30,6 +33,8 @@ export default function App() {
   const [custom, setCustom] = useState<DateRange>(() => ({ from: startOfMonth(todayISO()), to: todayISO() }));
   const [qa, setQa] = useState<{ open: boolean; prefill?: QuickAddPrefill }>({ open: false });
   const [editor, setEditor] = useState<{ open: boolean; arg: EditorArg }>({ open: false, arg: {} });
+  const [importOpen, setImportOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [onboard, setOnboard] = useState(false);
   const market = useMarketPrices();
 
@@ -60,6 +65,29 @@ export default function App() {
     [dataset, prices, range]
   );
 
+  // In-dashboard notifications — built from live data, filtered by dismissals.
+  const notifications = useMemo(() => {
+    if (!dataset || !snapshot) return [];
+    const all = buildNotifications({
+      settings: dataset.settings,
+      recurring: dataset.recurring,
+      accounts: dataset.accounts,
+      people: dataset.people,
+      transactions: dataset.transactions,
+      splits: dataset.splits,
+      policies: dataset.policies,
+      snapshot,
+      today: todayISO(),
+    });
+    const dismissed = new Set(dataset.settings?.dismissedNotifications ?? []);
+    return all.filter((n) => !dismissed.has(n.id));
+  }, [dataset, snapshot]);
+
+  const dismissNotification = (id: string) => {
+    const cur = dataset?.settings?.dismissedNotifications ?? [];
+    void updateSettings({ dismissedNotifications: [...new Set([...cur, id])] });
+  };
+
   const api: AppApi = useMemo(
     () => ({
       goTo: setPage,
@@ -69,6 +97,8 @@ export default function App() {
         setPendingTxnFilter(filter ?? null);
         setPage('transactions');
       },
+      openImport: () => setImportOpen(true),
+      openAi: () => setAiOpen(true),
     }),
     []
   );
@@ -80,7 +110,10 @@ export default function App() {
       <div className="min-h-screen bg-canvas">
         <Sidebar page={page} onNavigate={setPage} />
         <div className="md:pl-60">
-          <TopBar onQuickAdd={() => setQa({ open: true })}>
+          <TopBar
+            onQuickAdd={() => setQa({ open: true })}
+            notifications={<NotificationBell items={notifications} onNavigate={setPage} onDismiss={dismissNotification} />}
+          >
             <DateRangePicker preset={preset} range={range} custom={custom} onPreset={setPreset} onCustom={setCustom} />
           </TopBar>
           <MobileNav page={page} onNavigate={setPage} />
@@ -91,13 +124,15 @@ export default function App() {
             {page === 'people' && snapshot && <People dataset={dataset} snapshot={snapshot} range={range} />}
             {page === 'reimbursements' && snapshot && <Reimbursements dataset={dataset} snapshot={snapshot} range={range} />}
             {page === 'investments' && snapshot && <Investments dataset={dataset} snapshot={snapshot} range={range} prices={prices} market={market} />}
-            {page === 'reports' && <StubPage page={page} dataset={dataset} snapshot={snapshot} />}
-            {page === 'settings' && <Settings dataset={dataset} />}
+            {page === 'reports' && snapshot && <Reports dataset={dataset} snapshot={snapshot} range={range} prices={prices} />}
+            {page === 'settings' && <Settings dataset={dataset} snapshot={snapshot} />}
           </main>
         </div>
 
         <QuickAdd open={qa.open} prefill={qa.prefill} dataset={dataset} onClose={() => setQa({ open: false })} />
         <TxnEditor open={editor.open} arg={editor.arg} dataset={dataset} onClose={() => setEditor({ open: false, arg: {} })} />
+        <StatementImport open={importOpen} dataset={dataset} onClose={() => setImportOpen(false)} />
+        <AiCategorize open={aiOpen} dataset={dataset} onClose={() => setAiOpen(false)} />
         {onboard && <Onboarding onClose={() => setOnboard(false)} />}
         <ToastHost />
       </div>

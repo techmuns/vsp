@@ -19,6 +19,8 @@ import {
   ArrowDown,
   Bookmark,
   CheckSquare,
+  UploadCloud,
+  Sparkles,
 } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
@@ -148,6 +150,10 @@ export default function Transactions({ dataset, range }: { dataset: Dataset; sna
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" icon={FileDown} onClick={() => doExport('xlsx')}>xlsx</Button>
             <Button variant="outline" size="sm" onClick={() => doExport('csv')}>CSV</Button>
+            <Button variant="outline" size="sm" icon={UploadCloud} onClick={() => app.openImport()}>Import</Button>
+            {dataset.settings?.aiEnabled && (
+              <Button variant="outline" size="sm" icon={Sparkles} onClick={() => app.openAi()}>Suggest</Button>
+            )}
             <Button size="sm" icon={Plus} onClick={() => app.openEditor()}>Add</Button>
           </div>
         }

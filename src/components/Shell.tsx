@@ -49,7 +49,7 @@ export function Sidebar({ page, onNavigate }: { page: Page; onNavigate: (p: Page
       </nav>
       <div className="space-y-1 border-t border-line px-3 py-3">
         <NavButton item={SETTINGS_NAV} active={page === 'settings'} onClick={() => onNavigate('settings')} />
-        <p className="px-3 pt-1 text-[10px] text-muted">Phase 1 · Foundation</p>
+        <p className="px-3 pt-1 text-[10px] text-muted">Local-first · Private</p>
       </div>
     </aside>
   );
@@ -79,7 +79,7 @@ export function MobileNav({ page, onNavigate }: { page: Page; onNavigate: (p: Pa
   );
 }
 
-export function TopBar({ onQuickAdd, children }: { onQuickAdd: () => void; children?: React.ReactNode }) {
+export function TopBar({ onQuickAdd, notifications, children }: { onQuickAdd: () => void; notifications?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-white/85 backdrop-blur-md">
       <div className="flex h-[57px] items-center justify-between gap-3 px-4 sm:px-6">
@@ -93,6 +93,7 @@ export function TopBar({ onQuickAdd, children }: { onQuickAdd: () => void; child
         </div>
         <div className="flex items-center gap-2">
           {children}
+          {notifications}
           <button
             onClick={onQuickAdd}
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand-gradient px-3 py-2 text-[13px] font-bold text-white shadow-sm transition hover:opacity-95 focus-ring"
