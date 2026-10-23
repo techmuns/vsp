@@ -294,6 +294,40 @@ export async function saveClaim(input: Partial<ReimbursementClaim> & { periodSta
   return rec;
 }
 
+export async function updateClaim(id: string, patch: Partial<ReimbursementClaim>): Promise<void> {
+  await db.reimbursementClaims.update(id, { ...patch, updatedAt: nowTs() });
+}
+
+export async function deleteClaim(id: string): Promise<void> {
+  await db.reimbursementClaims.delete(id);
+}
+
+/** Hard-delete a record from a configurable (non-transaction) table. */
+export async function removeEntity(
+  table: 'reimbursementPolicies' | 'budgets' | 'events' | 'goals' | 'investments' | 'people' | 'categories' | 'purposes' | 'accounts',
+  id: string
+): Promise<void> {
+  await (db[table] as typeof db.budgets).delete(id);
+}
+
+/* ------------------------------------------------------------ saved filters */
+
+export async function saveTxnFilter(name: string, filter: Record<string, unknown>): Promise<string> {
+  const cur = (await db.settings.get('app')) ?? (await ensureSeeded());
+  const list = cur.savedTxnFilters ?? [];
+  const existing = list.find((f) => f.name === name);
+  const id = existing?.id ?? newId('flt');
+  const next = existing ? list.map((f) => (f.id === id ? { id, name, filter } : f)) : [...list, { id, name, filter }];
+  await db.settings.put({ ...cur, savedTxnFilters: next });
+  return id;
+}
+
+export async function removeTxnFilter(id: string): Promise<void> {
+  const cur = await db.settings.get('app');
+  if (!cur) return;
+  await db.settings.put({ ...cur, savedTxnFilters: (cur.savedTxnFilters ?? []).filter((f) => f.id !== id) });
+}
+
 /* ------------------------------------------------------------- danger zone */
 
 /** Wipe EVERYTHING (demo + real). Used from Settings with a confirm. */

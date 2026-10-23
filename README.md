@@ -3,10 +3,12 @@
 A **private, local-first** personal finance app. All your money data lives in
 your browser (IndexedDB) — nothing is uploaded, no backend, no bank passwords.
 
-> **Phase 1 of 3 — the Foundation.** The engine, local storage, design system,
-> a fully working **Overview**, **Quick add** and **Settings** are complete.
-> Transactions, Expenses, Investments, People, Reimbursements and Reports are
-> tidy "coming next" stubs for Phase 2/3.
+> **Phases 1 & 2 are live.** Phase 1 built the foundation (engine, local
+> storage, design system, Overview, Quick-add, Settings). Phase 2 adds the five
+> everyday modules — **Transactions**, **Expenses**, **People**,
+> **Reimbursements** and **Investments** — plus a full transaction editor and an
+> optional public price feed. **Reports** (with statement import & reconciliation)
+> is the Phase 3 stub.
 
 ## Highlights
 
@@ -35,9 +37,12 @@ src/
   components/ ui/ (Card, Controls, Table, Tabs), charts/ (SVG kit), Shell, QuickAdd …
   db/         Dexie schema, types, repo (data access), liveQuery hooks
   engine/     pure finance engine (txn-type registry, classify, portfolio, compute) + tests
-  app/        navigation, context, snapshot hook, lookups
-  pages/      Overview (live), Settings (live), stubs
+  app/        navigation, context, snapshot hook, lookups, market feed, filters
+  pages/      Overview, Transactions, Expenses, People, Reimbursements,
+              Investments, Settings (all live) + Reports (Phase 3 stub)
+  components/ … + editor/ (full transaction editor), quickadd/ (shared bits)
   demo/       removable demo-data generator (sample content lives ONLY here)
+scripts/      fetch-prices.mjs — the public price-feed fetcher (runs in CI only)
 ```
 
 ## Develop
@@ -67,6 +72,26 @@ manual steps afterwards:
 4. Save & Deploy.
 
 That's it — from then on it deploys itself on every push.
+
+## Optional live price feed (public data only)
+
+Investment prices can refresh automatically — fully isolated from your private
+data. A scheduled GitHub Action reads **`public/data/watchlist.json`** (stock
+symbols + mutual-fund ISINs only — no holdings, units or amounts), fetches
+mutual-fund NAVs from AMFI and stock quotes from a public source, and commits
+**`public/data/market-prices.json`**. The app loads that file at startup, merges
+it with your manual prices (newest date wins; manual always overrides), and
+works perfectly offline without it.
+
+One-time setup:
+
+1. Edit `public/data/watchlist.json` to list the symbols/ISINs of your holdings
+   (set each investment's symbol/ISIN in **Settings → Investments**, matching
+   format — Yahoo symbols like `RELIANCE.NS`, AMFI ISINs like `INF…`).
+2. The workflow (`.github/workflows/prices.yml`) runs weekday evenings and on
+   manual dispatch. **AMFI and the default stock source need no secrets.** If
+   you switch to a stock API that needs a key, add it as a repo secret and read
+   it from `process.env` in `scripts/fetch-prices.mjs` — never hardcode it.
 
 ## Privacy
 

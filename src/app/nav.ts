@@ -32,11 +32,11 @@ export interface NavItem {
 
 export const MAIN_NAV: NavItem[] = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard, color: MONEY.net, live: true },
-  { key: 'transactions', label: 'Transactions', icon: ArrowLeftRight, color: MONEY.transfer },
-  { key: 'expenses', label: 'Expenses', icon: Wallet, color: MONEY.out },
-  { key: 'investments', label: 'Investments', icon: TrendingUp, color: MONEY.invest },
-  { key: 'people', label: 'People', icon: Users, color: MONEY.receivable },
-  { key: 'reimbursements', label: 'Reimbursements', icon: Receipt, color: MONEY.reimb },
+  { key: 'transactions', label: 'Transactions', icon: ArrowLeftRight, color: MONEY.transfer, live: true },
+  { key: 'expenses', label: 'Expenses', icon: Wallet, color: MONEY.out, live: true },
+  { key: 'investments', label: 'Investments', icon: TrendingUp, color: MONEY.invest, live: true },
+  { key: 'people', label: 'People', icon: Users, color: MONEY.receivable, live: true },
+  { key: 'reimbursements', label: 'Reimbursements', icon: Receipt, color: MONEY.reimb, live: true },
   { key: 'reports', label: 'Reports', icon: PieChart, color: MONEY.net },
 ];
 

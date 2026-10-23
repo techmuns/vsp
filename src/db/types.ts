@@ -50,6 +50,7 @@ export interface Transaction {
   status: TxnStatus;
   reference?: string;
   linkedTxnId?: ID; // e.g. a repayment → its original loan
+  dueDate?: ISODate; // optional: when a lent/borrowed amount is due back
   eventId?: ID;
   tags?: string[];
   notes?: string;
@@ -128,7 +129,7 @@ export interface ReimbursementPolicy {
   updatedAt: Timestamp;
 }
 
-export type ClaimStatus = 'draft' | 'submitted' | 'approved' | 'received' | 'rejected';
+export type ClaimStatus = 'draft' | 'submitted' | 'approved' | 'received' | 'rejected' | 'cancelled';
 
 export interface ReimbursementClaim {
   id: ID;
@@ -241,6 +242,14 @@ export interface AppEvent {
   updatedAt: Timestamp;
 }
 
+/** A named, reusable Transactions filter. `filter` is an opaque JSON blob whose
+ *  concrete shape lives with the Transactions page. */
+export interface SavedTxnFilter {
+  id: ID;
+  name: string;
+  filter: Record<string, unknown>;
+}
+
 export interface Settings {
   id: 'app';
   salaryCycleStartDay: number; // default 11, editable
@@ -250,6 +259,7 @@ export interface Settings {
   currency: 'INR';
   onboardedAt?: Timestamp;
   schemaVersion: number;
+  savedTxnFilters?: SavedTxnFilter[];
 }
 
 export interface AuditLog {

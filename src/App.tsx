@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AppContext, type AppApi, type QuickAddPrefill } from './app/context';
+import { AppContext, type AppApi, type EditorArg, type QuickAddPrefill } from './app/context';
 import type { Page } from './app/nav';
 import { useDataset } from './db/hooks';
 import { ensureSeeded } from './db/repo';
-import { useSnapshot } from './app/useSnapshot';
+import { datasetToEngineInput } from './app/useSnapshot';
+import { computeSnapshot } from './engine';
+import { useMarketPrices, mergePrices } from './app/market';
+import { setPendingTxnFilter } from './app/pendingFilter';
 import { resolveRange, startOfMonth, todayISO, type DateRange, type RangePreset } from './lib/dates';
 import { Sidebar, MobileNav, TopBar, BootSplash } from './components/Shell';
 import { DateRangePicker } from './components/DateRangePicker';
 import { QuickAdd } from './components/quickadd/QuickAdd';
+import { TxnEditor } from './components/editor/TxnEditor';
+import { ToastHost } from './app/toast';
 import { Onboarding } from './components/Onboarding';
 import Overview from './pages/Overview';
 import Settings from './pages/Settings';
+import Transactions from './pages/Transactions';
+import Expenses from './pages/Expenses';
+import People from './pages/People';
+import Reimbursements from './pages/Reimbursements';
+import Investments from './pages/Investments';
 import { StubPage } from './pages/StubPage';
 
 export default function App() {
@@ -19,7 +29,9 @@ export default function App() {
   const [preset, setPreset] = useState<RangePreset>('this_month');
   const [custom, setCustom] = useState<DateRange>(() => ({ from: startOfMonth(todayISO()), to: todayISO() }));
   const [qa, setQa] = useState<{ open: boolean; prefill?: QuickAddPrefill }>({ open: false });
+  const [editor, setEditor] = useState<{ open: boolean; arg: EditorArg }>({ open: false, arg: {} });
   const [onboard, setOnboard] = useState(false);
+  const market = useMarketPrices();
 
   useEffect(() => {
     ensureSeeded();
@@ -40,10 +52,24 @@ export default function App() {
   }, [dataset]);
 
   const range = useMemo(() => resolveRange(preset, { salaryDay, custom, earliest }), [preset, salaryDay, custom, earliest]);
-  const snapshot = useSnapshot(dataset, range);
+
+  // Merge manual DB prices with the optional public market feed, newest wins.
+  const prices = useMemo(() => (dataset ? mergePrices(dataset.prices, dataset.investments, market.rows) : []), [dataset, market.rows]);
+  const snapshot = useMemo(
+    () => (dataset ? computeSnapshot({ ...datasetToEngineInput(dataset), prices }, range) : null),
+    [dataset, prices, range]
+  );
 
   const api: AppApi = useMemo(
-    () => ({ goTo: setPage, openQuickAdd: (prefill) => setQa({ open: true, prefill }) }),
+    () => ({
+      goTo: setPage,
+      openQuickAdd: (prefill) => setQa({ open: true, prefill }),
+      openEditor: (arg) => setEditor({ open: true, arg: arg ?? {} }),
+      openTransactions: (filter) => {
+        setPendingTxnFilter(filter ?? null);
+        setPage('transactions');
+      },
+    }),
     []
   );
 
@@ -60,13 +86,20 @@ export default function App() {
           <MobileNav page={page} onNavigate={setPage} />
           <main className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6">
             {page === 'overview' && snapshot && <Overview dataset={dataset} snapshot={snapshot} range={range} />}
+            {page === 'transactions' && snapshot && <Transactions dataset={dataset} snapshot={snapshot} range={range} />}
+            {page === 'expenses' && snapshot && <Expenses dataset={dataset} snapshot={snapshot} range={range} />}
+            {page === 'people' && snapshot && <People dataset={dataset} snapshot={snapshot} range={range} />}
+            {page === 'reimbursements' && snapshot && <Reimbursements dataset={dataset} snapshot={snapshot} range={range} />}
+            {page === 'investments' && snapshot && <Investments dataset={dataset} snapshot={snapshot} range={range} prices={prices} market={market} />}
+            {page === 'reports' && <StubPage page={page} dataset={dataset} snapshot={snapshot} />}
             {page === 'settings' && <Settings dataset={dataset} />}
-            {page !== 'overview' && page !== 'settings' && <StubPage page={page} dataset={dataset} snapshot={snapshot} />}
           </main>
         </div>
 
         <QuickAdd open={qa.open} prefill={qa.prefill} dataset={dataset} onClose={() => setQa({ open: false })} />
+        <TxnEditor open={editor.open} arg={editor.arg} dataset={dataset} onClose={() => setEditor({ open: false, arg: {} })} />
         {onboard && <Onboarding onClose={() => setOnboard(false)} />}
+        <ToastHost />
       </div>
     </AppContext.Provider>
   );
