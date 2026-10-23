@@ -42,7 +42,14 @@ export function listTxnTypes(): TxnTypeDef[] {
 }
 
 /** Set of types whose activity feeds the investment portfolio. */
-export const INVESTMENT_TYPES = new Set(['investment_buy', 'investment_sell', 'investment_contribution', 'investment_withdrawal']);
+export const INVESTMENT_TYPES = new Set([
+  'investment_buy',
+  'investment_sell',
+  'investment_contribution',
+  'investment_withdrawal',
+  'investment_dividend',
+  'investment_charge',
+]);
 
 /* -------------------------------------------------------- shared classifiers */
 
@@ -224,6 +231,40 @@ registerTxnType({
     const e = emptyEffect();
     if (txn.accountId) bump(e.account, txn.accountId, txn.amountPaise);
     e.invested -= txn.amountPaise;
+    return e;
+  },
+});
+
+registerTxnType({
+  id: 'investment_dividend',
+  label: 'Dividend / payout',
+  group: 'invest',
+  direction: 'in',
+  color: MONEY.invest,
+  advanced: true,
+  fields: F.invest,
+  classify: (txn) => {
+    const e = emptyEffect();
+    if (txn.accountId) bump(e.account, txn.accountId, txn.amountPaise);
+    // A payout from an investment is income you received.
+    e.income += txn.amountPaise;
+    return e;
+  },
+});
+
+registerTxnType({
+  id: 'investment_charge',
+  label: 'Investment charge / fee',
+  group: 'invest',
+  direction: 'out',
+  color: MONEY.invest,
+  advanced: true,
+  fields: F.invest,
+  // An investing cost (brokerage, AMC). It reduces cash but is not lifestyle
+  // spending, so it is kept out of personal expense.
+  classify: (txn) => {
+    const e = emptyEffect();
+    if (txn.accountId) bump(e.account, txn.accountId, -txn.amountPaise);
     return e;
   },
 });

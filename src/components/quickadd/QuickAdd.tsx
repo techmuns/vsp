@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, ChevronDown, Plus, Trash2, Sparkles } from 'lucide-react';
+import { X, ChevronDown, Sparkles } from 'lucide-react';
 import type { Dataset } from '../../db/hooks';
 import type { QuickAddPrefill } from '../../app/context';
-import { addTransaction, saveAccount, saveCategory, saveInvestment, savePerson, savePurpose } from '../../db/repo';
+import { addTransaction, saveCategory, savePerson, savePurpose } from '../../db/repo';
 import { getTxnType, listTxnTypes } from '../../engine';
 import { MONEY, colorForId } from '../../lib/brand';
 import { fmtINR } from '../../lib/format';
 import { todayISO } from '../../db/ids';
-import type { AccountType, AssetType } from '../../db/types';
-import { AmountField, Button, DateField, Dropdown, Field, Segmented, TextArea, TextField, Toggle, type Option } from '../ui/Controls';
+import { AmountField, Button, DateField, Dropdown, Field, TextArea, TextField, Toggle, type Option } from '../ui/Controls';
 import { CreatableSelect } from './CreatableSelect';
+import { AccountCreateForm, InvestmentCreateForm } from './createForms';
+import { SplitEditor, type SplitRow } from './SplitEditor';
 
 const FRIENDLY: { id: string; label: string }[] = [
   { id: 'expense', label: 'Spent' },
@@ -18,13 +19,6 @@ const FRIENDLY: { id: string; label: string }[] = [
   { id: 'shared_expense', label: 'For someone' },
   { id: 'investment_buy', label: 'Invest' },
 ];
-
-interface SplitRow {
-  amountPaise: number | null;
-  categoryId?: string;
-  personId?: string;
-  reimbursable?: boolean;
-}
 
 interface Draft {
   type: string;
@@ -420,115 +414,6 @@ export function QuickAdd({ open, prefill, onClose, dataset }: { open: boolean; p
             </Button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------------------------------------------- create forms */
-
-const ACCOUNT_TYPE_OPTS: Option<AccountType>[] = [
-  { value: 'bank', label: 'Bank' },
-  { value: 'cash', label: 'Cash' },
-  { value: 'credit_card', label: 'Credit card' },
-  { value: 'broker_cash', label: 'Broker' },
-];
-
-function AccountCreateForm({ onDone, onCancel }: { onDone: (id: string) => void; onCancel: () => void }) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState<AccountType>('bank');
-  return (
-    <div className="space-y-2">
-      <TextField autoFocus value={name} placeholder="Account name" onChange={(e) => setName(e.target.value)} />
-      <Segmented value={type} options={ACCOUNT_TYPE_OPTS} onChange={setType} size="sm" />
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onCancel} className="flex-1">
-          Cancel
-        </Button>
-        <Button size="sm" disabled={!name.trim()} onClick={async () => onDone((await saveAccount({ name: name.trim(), type })).id)} className="flex-1">
-          Add account
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-const ASSET_TYPE_OPTS: Option<AssetType>[] = [
-  { value: 'stock', label: 'Stock' },
-  { value: 'mutual_fund', label: 'Mutual fund' },
-  { value: 'etf', label: 'ETF' },
-  { value: 'other', label: 'Other' },
-];
-
-function InvestmentCreateForm({ onDone, onCancel }: { onDone: (id: string) => void; onCancel: () => void }) {
-  const [name, setName] = useState('');
-  const [platform, setPlatform] = useState('');
-  const [assetType, setAssetType] = useState<AssetType>('stock');
-  return (
-    <div className="space-y-2">
-      <TextField autoFocus value={name} placeholder="Investment name" onChange={(e) => setName(e.target.value)} />
-      <TextField value={platform} placeholder="Platform / broker" onChange={(e) => setPlatform(e.target.value)} />
-      <Segmented value={assetType} options={ASSET_TYPE_OPTS} onChange={setAssetType} size="sm" />
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onCancel} className="flex-1">
-          Cancel
-        </Button>
-        <Button size="sm" disabled={!name.trim()} onClick={async () => onDone((await saveInvestment({ name: name.trim(), platform: platform.trim() || 'Other', assetType })).id)} className="flex-1">
-          Add
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function SplitEditor({
-  rows,
-  categoryOpts,
-  personOpts,
-  remainder,
-  onChange,
-}: {
-  rows: SplitRow[];
-  categoryOpts: Option[];
-  personOpts: Option[];
-  remainder: number;
-  onChange: (rows: SplitRow[]) => void;
-}) {
-  const update = (i: number, patch: Partial<SplitRow>) => onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  return (
-    <div className="mt-3 space-y-2">
-      {rows.map((r, i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <div className="w-28 shrink-0">
-            <AmountField paise={r.amountPaise} onPaise={(p) => update(i, { amountPaise: p })} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Dropdown
-              value={r.personId ? `p:${r.personId}` : r.categoryId ?? ''}
-              options={[
-                ...categoryOpts.map((o) => ({ ...o })),
-                ...personOpts.map((o) => ({ value: `p:${o.value}`, label: `For ${o.label}`, color: MONEY.receivable })),
-              ]}
-              onChange={(v) => (v.startsWith('p:') ? update(i, { personId: v.slice(2), categoryId: undefined }) : update(i, { categoryId: v, personId: undefined }))}
-              placeholder="Category / person"
-              size="sm"
-              width="100%"
-            />
-          </div>
-          {rows.length > 1 && (
-            <button onClick={() => onChange(rows.filter((_, idx) => idx !== i))} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line text-grey hover:text-money-out">
-              <Trash2 size={15} />
-            </button>
-          )}
-        </div>
-      ))}
-      <div className="flex items-center justify-between">
-        <button onClick={() => onChange([...rows, { amountPaise: remainder > 0 ? remainder : null }])} className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand">
-          <Plus size={14} /> Add part
-        </button>
-        <span className={`tnum text-[11.5px] font-medium ${remainder === 0 ? 'text-money-save' : 'text-grey'}`}>
-          {remainder === 0 ? 'Balanced' : `${fmtINR(remainder)} left`}
-        </span>
       </div>
     </div>
   );

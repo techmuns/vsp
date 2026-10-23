@@ -11,6 +11,8 @@ export interface InvestmentPosition {
   pricePaise: number | null;
   unrealizedPaise: number | null; // null when there is no price (never invented)
   realizedPaise: number; // cumulative realised P/L up to asOf
+  dividendsPaise: number; // payouts received
+  chargesPaise: number; // investing costs paid
 }
 
 export interface Portfolio {
@@ -19,6 +21,8 @@ export interface Portfolio {
   totalValuePaise: number;
   totalUnrealizedPaise: number; // only across holdings that have a price
   totalRealizedPaise: number;
+  totalDividendsPaise: number;
+  totalChargesPaise: number;
   pricedValuePaise: number;
   anyMissingPrice: boolean;
 }
@@ -43,14 +47,18 @@ export function buildPortfolio(txns: Transaction[], investments: Investment[], p
     .filter((t) => !t.voided && t.investmentId && INVESTMENT_TYPES.has(t.type) && t.date <= asOf)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt - b.createdAt));
 
-  const acc: Record<string, { units: number; cost: number; realized: number }> = {};
-  const get = (id: string) => (acc[id] ??= { units: 0, cost: 0, realized: 0 });
+  const acc: Record<string, { units: number; cost: number; realized: number; dividends: number; charges: number }> = {};
+  const get = (id: string) => (acc[id] ??= { units: 0, cost: 0, realized: 0, dividends: 0, charges: 0 });
 
   for (const t of relevant) {
     const a = get(t.investmentId!);
     if (t.type === 'investment_buy' || t.type === 'investment_contribution') {
       a.cost += t.amountPaise;
       if (t.units) a.units += t.units;
+    } else if (t.type === 'investment_dividend') {
+      a.dividends += t.amountPaise;
+    } else if (t.type === 'investment_charge') {
+      a.charges += t.amountPaise;
     } else {
       // sell / withdrawal
       const sellUnits = t.units ?? 0;
@@ -74,11 +82,13 @@ export function buildPortfolio(txns: Transaction[], investments: Investment[], p
   let totalValue = 0;
   let totalUnreal = 0;
   let totalReal = 0;
+  let totalDividends = 0;
+  let totalCharges = 0;
   let pricedValue = 0;
   let anyMissing = false;
 
   for (const id of ids) {
-    const a = acc[id] ?? { units: 0, cost: 0, realized: 0 };
+    const a = acc[id] ?? { units: 0, cost: 0, realized: 0, dividends: 0, charges: 0 };
     const lp = latestPriceAsOf(prices, id, asOf);
     const hasPrice = !!lp;
     const value = hasPrice ? Math.round(a.units * lp!.pricePaise) : a.cost;
@@ -92,12 +102,16 @@ export function buildPortfolio(txns: Transaction[], investments: Investment[], p
       pricePaise: lp?.pricePaise ?? null,
       unrealizedPaise: hasPrice ? value - a.cost : null,
       realizedPaise: a.realized,
+      dividendsPaise: a.dividends,
+      chargesPaise: a.charges,
     };
     byInvestment[id] = pos;
 
     totalCost += pos.costPaise;
     totalValue += pos.valuePaise;
     totalReal += pos.realizedPaise;
+    totalDividends += pos.dividendsPaise;
+    totalCharges += pos.chargesPaise;
     if (hasPrice) {
       totalUnreal += pos.unrealizedPaise ?? 0;
       pricedValue += pos.valuePaise;
@@ -112,6 +126,8 @@ export function buildPortfolio(txns: Transaction[], investments: Investment[], p
     totalValuePaise: totalValue,
     totalUnrealizedPaise: totalUnreal,
     totalRealizedPaise: totalReal,
+    totalDividendsPaise: totalDividends,
+    totalChargesPaise: totalCharges,
     pricedValuePaise: pricedValue,
     anyMissingPrice: anyMissing,
   };

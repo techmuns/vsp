@@ -1,0 +1,5 @@
+{
+  "_comment": "PUBLIC identifiers only — stock symbols (Yahoo format, e.g. RELIANCE.NS) and mutual-fund ISINs. No holdings, units or amounts. Edit this list to match the symbols/ISINs of your own investments (set each investment's symbol/ISIN in Settings). The scheduled GitHub Action reads this and writes public/data/market-prices.json.",
+  "stocks": ["RELIANCE.NS", "INFY.NS"],
+  "mutualFunds": ["INF879O01027"]
+}

@@ -91,6 +91,76 @@ export function Dropdown<T extends string>({
   );
 }
 
+/** Multi-select dropdown with checkboxes — for filter bars. */
+export function MultiSelect({
+  label,
+  options,
+  selected,
+  onChange,
+  width = 160,
+}: {
+  label: string;
+  options: Option[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+  width?: number | string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  const toggle = (v: string) => onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  return (
+    <div className="relative" ref={ref} style={{ width }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold shadow-sm transition hover:border-brand/40 focus-ring ${
+          selected.length ? 'border-brand/40 text-brand' : 'border-line text-slate'
+        }`}
+      >
+        <span className="truncate">
+          {label}
+          {selected.length > 0 && <span className="ml-1 tnum">· {selected.length}</span>}
+        </span>
+        <ChevronDown size={15} className={`shrink-0 text-grey transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="nice-scroll absolute z-50 mt-1.5 max-h-72 min-w-full overflow-auto rounded-xl border border-line bg-white py-1 shadow-pop anim-fade" style={{ width: 'max-content', maxWidth: 260 }}>
+          {options.length === 0 && <div className="px-3 py-2 text-[12px] text-muted">None yet</div>}
+          {options.map((o) => {
+            const on = selected.includes(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => toggle(o.value)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] transition hover:bg-canvas"
+              >
+                <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${on ? 'border-brand bg-brand text-white' : 'border-line'}`}>
+                  {on && <Check size={11} strokeWidth={3} />}
+                </span>
+                {o.color && <span className="h-2.5 w-2.5 rounded-sm" style={{ background: o.color }} />}
+                <span className="truncate text-slate">{o.label}</span>
+              </button>
+            );
+          })}
+          {selected.length > 0 && (
+            <button type="button" onClick={() => onChange([])} className="mt-1 w-full border-t border-line px-3 py-1.5 text-left text-[12px] font-semibold text-money-out hover:bg-canvas">
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Segmented toggle. */
 export function Segmented<T extends string>({
   value,

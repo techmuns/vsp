@@ -44,4 +44,20 @@ describe('portfolio', () => {
     expect(pf.byInvestment['w'].hasPrice).toBe(false);
     expect(pf.byInvestment['w'].valuePaise).toBe(R(10000));
   });
+
+  it('tracks dividends and charges without disturbing cost basis or units', () => {
+    const txns = [
+      txn({ type: 'investment_buy', amountPaise: R(10000), accountId: 'broker', investmentId: 'd', units: 10, date: '2026-05-01' }),
+      txn({ type: 'investment_dividend', amountPaise: R(300), accountId: 'broker', investmentId: 'd', date: '2026-07-01' }),
+      txn({ type: 'investment_charge', amountPaise: R(50), accountId: 'broker', investmentId: 'd', date: '2026-08-01' }),
+    ];
+    const pf = buildPortfolio(txns, [inv('d')], [], '2026-10-31');
+    const pos = pf.byInvestment['d'];
+    expect(pos.units).toBe(10);
+    expect(pos.costPaise).toBe(R(10000));
+    expect(pos.dividendsPaise).toBe(R(300));
+    expect(pos.chargesPaise).toBe(R(50));
+    expect(pf.totalDividendsPaise).toBe(R(300));
+    expect(pf.totalChargesPaise).toBe(R(50));
+  });
 });
