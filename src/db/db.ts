@@ -18,9 +18,11 @@ import type {
   AppEvent,
   Settings,
   AuditLog,
+  ImportProfile,
+  Attachment,
 } from './types';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * The local, single-user finance database. Everything lives in the browser
@@ -49,6 +51,8 @@ export class KoshDB extends Dexie {
   events!: Table<AppEvent, string>;
   settings!: Table<Settings, string>;
   auditLog!: Table<AuditLog, string>;
+  importProfiles!: Table<ImportProfile, string>;
+  attachments!: Table<Attachment, string>;
 
   constructor() {
     super('kosh');
@@ -71,6 +75,13 @@ export class KoshDB extends Dexie {
       events: 'id, active, demo',
       settings: 'id',
       auditLog: 'id, txnId, at, entity',
+    });
+
+    // v2: statement-import profiles + file attachments. Dexie carries existing
+    // stores forward untouched — no data is ever wiped on upgrade.
+    this.version(2).stores({
+      importProfiles: 'id, accountId, demo',
+      attachments: 'id, txnId, importId, demo',
     });
   }
 }

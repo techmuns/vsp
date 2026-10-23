@@ -37,7 +37,7 @@ export const MAIN_NAV: NavItem[] = [
   { key: 'investments', label: 'Investments', icon: TrendingUp, color: MONEY.invest, live: true },
   { key: 'people', label: 'People', icon: Users, color: MONEY.receivable, live: true },
   { key: 'reimbursements', label: 'Reimbursements', icon: Receipt, color: MONEY.reimb, live: true },
-  { key: 'reports', label: 'Reports', icon: PieChart, color: MONEY.net },
+  { key: 'reports', label: 'Reports', icon: PieChart, color: MONEY.net, live: true },
 ];
 
 export const SETTINGS_NAV: NavItem = { key: 'settings', label: 'Settings', icon: Settings, color: MONEY.transfer, live: true };

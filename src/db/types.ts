@@ -250,16 +250,71 @@ export interface SavedTxnFilter {
   filter: Record<string, unknown>;
 }
 
+export interface NotificationPrefs {
+  bills: boolean;
+  cardDue: boolean;
+  receivables: boolean;
+  reimbursements: boolean;
+  weeklyClaim: boolean;
+  missingDetails: boolean;
+  reconciliation: boolean;
+  spendingLimit: boolean;
+}
+
 export interface Settings {
   id: 'app';
   salaryCycleStartDay: number; // default 11, editable
   startDate: ISODate;
   demoMode: boolean;
-  aiEnabled: false;
+  /** Opt-in AI auto-categorisation. OFF by default; only sends minimal text. */
+  aiEnabled: boolean;
   currency: 'INR';
   onboardedAt?: Timestamp;
   schemaVersion: number;
   savedTxnFilters?: SavedTxnFilter[];
+  notificationPrefs?: NotificationPrefs;
+  dismissedNotifications?: string[];
+  lastBackupAt?: Timestamp;
+  /** Optional monthly spending-limit alert. */
+  spendingLimitPaise?: Paise;
+}
+
+/** Which statement column maps to which field (by column index). */
+export interface ColumnMapping {
+  date?: number;
+  description?: number;
+  amount?: number; // single signed/absolute amount column
+  debit?: number; // money out column
+  credit?: number; // money in column
+  balance?: number;
+  reference?: number;
+}
+
+/** A reusable per-account statement-import mapping. */
+export interface ImportProfile {
+  id: ID;
+  name: string;
+  accountId?: ID;
+  mapping: ColumnMapping;
+  amountMode: 'single' | 'debitCredit';
+  dateFormat?: string; // e.g. 'DD/MM/YYYY'
+  skipRows?: number;
+  demo?: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** A stored file (e.g. a statement), base64 so it travels in backups. */
+export interface Attachment {
+  id: ID;
+  txnId?: ID;
+  importId?: ID;
+  name: string;
+  mime: string;
+  size: number;
+  dataBase64: string;
+  createdAt: Timestamp;
+  demo?: boolean;
 }
 
 export interface AuditLog {

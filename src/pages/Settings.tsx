@@ -11,31 +11,54 @@ import {
   Power,
   Sparkles,
   AlertTriangle,
+  UploadCloud,
+  Repeat,
+  Target,
+  Bell,
+  Download,
+  Clock,
+  CheckCircle2,
+  Pencil,
 } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
-import type { AccountType, CategoryKind } from '../db/types';
+import { useApp } from '../app/context';
+import type { AccountType, CategoryKind, Goal, NotificationPrefs, Recurring, RecurringMode } from '../db/types';
 import {
   clearDemoData,
+  confirmRecurring,
+  exportBackup,
+  inspectBackup,
+  loadBackupFromFile,
+  removeEntity,
+  restoreBackup,
   saveAccount,
   saveCategory,
+  saveGoal,
   savePerson,
   savePolicy,
   savePurpose,
+  saveRecurring,
   setActive,
   updateSettings,
   wipeAll,
+  type Backup,
+  type RestoreSummary,
 } from '../db/repo';
+import { SCHEMA_VERSION } from '../db/db';
 import { loadDemoData } from '../demo/generate';
+import { describeSchedule, goalProgress, goalAllocationConflicts, getTxnType, type Snapshot } from '../engine';
 import { accountIcon, accountColor } from '../app/lookups';
 import { colorForId, MONEY } from '../lib/brand';
-import { fmtINR } from '../lib/format';
+import { fmtINR, fmtDate } from '../lib/format';
+import { todayISO } from '../db/ids';
+import { toast } from '../app/toast';
 import { Card, CardHeader, PageHeader, Badge, EmptyState } from '../components/ui/Card';
 import { SubTabs } from '../components/ui/Tabs';
-import { AmountField, Button, DateField, Dropdown, Field, TextField, type Option } from '../components/ui/Controls';
+import { AmountField, Button, DateField, Dropdown, Field, MultiSelect, Segmented, TextField, Toggle, type Option } from '../components/ui/Controls';
 
-type Section = 'prefs' | 'accounts' | 'categories' | 'people' | 'reimburse' | 'data';
+type Section = 'prefs' | 'accounts' | 'categories' | 'people' | 'reimburse' | 'recurring' | 'goals' | 'alerts' | 'data';
 
-export default function Settings({ dataset }: { dataset: Dataset }) {
+export default function Settings({ dataset, snapshot }: { dataset: Dataset; snapshot: Snapshot | null }) {
   const [section, setSection] = useState<Section>('prefs');
   const tabs: { key: Section; label: string; color?: string }[] = [
     { key: 'prefs', label: 'Preferences', color: MONEY.net },
@@ -43,6 +66,9 @@ export default function Settings({ dataset }: { dataset: Dataset }) {
     { key: 'categories', label: 'Categories', color: MONEY.out },
     { key: 'people', label: 'People & purposes', color: MONEY.receivable },
     { key: 'reimburse', label: 'Reimbursements', color: MONEY.reimb },
+    { key: 'recurring', label: 'Recurring', color: MONEY.transfer },
+    { key: 'goals', label: 'Goals', color: MONEY.save },
+    { key: 'alerts', label: 'Notifications', color: MONEY.card },
     { key: 'data', label: 'Data', color: MONEY.invest },
   ];
 
@@ -56,6 +82,9 @@ export default function Settings({ dataset }: { dataset: Dataset }) {
       {section === 'categories' && <Categories dataset={dataset} />}
       {section === 'people' && <PeoplePurposes dataset={dataset} />}
       {section === 'reimburse' && <Reimbursements dataset={dataset} />}
+      {section === 'recurring' && <RecurringSection dataset={dataset} />}
+      {section === 'goals' && <GoalsSection dataset={dataset} snapshot={snapshot} />}
+      {section === 'alerts' && <AlertsSection dataset={dataset} />}
       {section === 'data' && <DataSection dataset={dataset} />}
     </div>
   );
@@ -69,6 +98,7 @@ function Preferences({ dataset }: { dataset: Dataset }) {
   const [startDate, setStartDate] = useState(s?.startDate ?? '');
 
   return (
+    <div className="space-y-4">
     <Card className="max-w-xl">
       <CardHeader icon={SettingsIcon} title="Your preferences" subtitle="These seed sensible defaults — change them anytime." accent={MONEY.net} />
       <div className="space-y-4">
@@ -105,6 +135,25 @@ function Preferences({ dataset }: { dataset: Dataset }) {
           </div>
         </Field>
       </div>
+    </Card>
+    <AiCard dataset={dataset} />
+    </div>
+  );
+}
+
+function AiCard({ dataset }: { dataset: Dataset }) {
+  const on = dataset.settings?.aiEnabled ?? false;
+  return (
+    <Card className="max-w-xl">
+      <CardHeader icon={Sparkles} title="AI category suggestions" subtitle="Off by default. When on, Kosh can suggest a category for entries that don’t have one." accent={MONEY.invest} />
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[12.5px] leading-snug text-slate">
+          Only the <span className="font-semibold">description</span>, the <span className="font-semibold">amount</span> and your own category names are ever sent —
+          never account numbers, balances, people or references. Every suggestion is reviewed and accepted by you in a batch; nothing is written automatically.
+        </p>
+        <Toggle checked={on} onChange={(v) => updateSettings({ aiEnabled: v })} color={MONEY.invest} />
+      </div>
+      {on && <p className="mt-2 text-[11.5px] text-muted">Use “Suggest categories” on the Transactions page. If the server isn’t configured, suggestions just won’t load — your data stays put.</p>}
     </Card>
   );
 }
@@ -462,14 +511,423 @@ function PolicyForm({ dataset, onDone }: { dataset: Dataset; onDone: () => void 
   );
 }
 
+/* -------------------------------------------------------------- recurring */
+
+const RECURRING_TYPES: Option[] = ['expense', 'income', 'transfer', 'cc_repayment', 'investment_contribution'].map((id) => ({
+  value: id,
+  label: getTxnType(id)?.label ?? id,
+}));
+
+const MODE_OPTS: Option<RecurringMode>[] = [
+  { value: 'reminder', label: 'Remind me' },
+  { value: 'draft', label: 'Draft it' },
+  { value: 'auto', label: 'Auto-add' },
+];
+
+const MODE_HINT: Record<RecurringMode, string> = {
+  reminder: 'Just a heads-up in notifications — nothing is entered until you confirm.',
+  draft: 'A prefilled entry waits for your one-tap confirmation.',
+  auto: 'Added automatically on its date (you can still edit or delete it).',
+};
+
+const WEEKDAY_OPTS: Option[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((d, i) => ({ value: String(i), label: d }));
+
+function ScheduleEditor({ schedule, onChange }: { schedule: string; onChange: (s: string) => void }) {
+  const [kind, val] = schedule.split(':');
+  const setKind = (k: string) => onChange(k === 'daily' ? 'daily' : k === 'weekly' ? 'weekly:1' : k === 'monthly' ? 'monthly:1' : k === 'yearly' ? 'yearly:01-01' : 'everyN:7');
+  const freqOpts: Option[] = [
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'yearly', label: 'Yearly' },
+    { value: 'everyN', label: 'Every N days' },
+  ];
+  return (
+    <div className="flex flex-wrap items-end gap-3">
+      <Field label="Repeats"><Dropdown value={kind} options={freqOpts} onChange={setKind} width={150} /></Field>
+      {kind === 'weekly' && <Field label="On"><Dropdown value={val ?? '1'} options={WEEKDAY_OPTS} onChange={(v) => onChange(`weekly:${v}`)} width={150} /></Field>}
+      {kind === 'monthly' && <Field label="Day of month"><TextField type="number" min={1} max={31} value={val ?? '1'} className="w-24" onChange={(e) => onChange(`monthly:${Math.max(1, Math.min(31, parseInt(e.target.value || '1', 10)))}`)} /></Field>}
+      {kind === 'yearly' && <Field label="On (MM-DD)"><TextField value={val ?? '01-01'} placeholder="01-01" className="w-28" onChange={(e) => onChange(`yearly:${e.target.value}`)} /></Field>}
+      {kind === 'everyN' && <Field label="Every N days"><TextField type="number" min={1} value={val ?? '7'} className="w-24" onChange={(e) => onChange(`everyN:${Math.max(1, parseInt(e.target.value || '1', 10))}`)} /></Field>}
+      <span className="pb-2 text-[12px] font-medium text-grey">{describeSchedule(schedule)}</span>
+    </div>
+  );
+}
+
+function RecurringSection({ dataset }: { dataset: Dataset }) {
+  const [editing, setEditing] = useState<Recurring | 'new' | null>(null);
+  const items = [...dataset.recurring].sort((a, b) => Number(b.active) - Number(a.active) || a.nextDate.localeCompare(b.nextDate));
+  const today = todayISO();
+  const nameOf = (id?: string) => dataset.accounts.find((a) => a.id === id)?.name;
+
+  return (
+    <Card>
+      <CardHeader
+        icon={Repeat}
+        title="Recurring items"
+        subtitle="Rent, salary, EMIs, SIPs — predicted ahead. A predicted item is never counted until you confirm it, or it’s matched when you import a statement."
+        accent={MONEY.transfer}
+        right={<Button size="sm" icon={Plus} onClick={() => setEditing('new')}>Add recurring</Button>}
+      />
+      {editing && <RecurringForm dataset={dataset} initial={editing === 'new' ? undefined : editing} onDone={() => setEditing(null)} />}
+      {items.length === 0 && !editing ? (
+        <EmptyState icon={Repeat} title="No recurring items yet" hint="Add your rent or salary to see it predicted and reconciled." compact />
+      ) : (
+        <div className="mt-3 space-y-2">
+          {items.map((r) => {
+            const due = r.active && r.nextDate <= today;
+            const missed = r.active && r.nextDate < today;
+            const t = r.template;
+            return (
+              <div key={r.id} className={`flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2.5 ${r.active ? 'bg-white' : 'bg-canvas opacity-60'} ${missed ? 'border-money-out/40' : 'border-line'}`}>
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: `${MONEY.transfer}16`, color: MONEY.transfer }}>
+                  <Repeat size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2">
+                    <span className="truncate text-[13px] font-semibold text-ink">{t.description || getTxnType(t.type ?? '')?.label || 'Recurring'}</span>
+                    {t.amountPaise != null && <span className="tnum text-[12.5px] font-bold text-slate">{fmtINR(t.amountPaise)}</span>}
+                    {r.demo && <Badge color={MONEY.invest}>demo</Badge>}
+                  </div>
+                  <div className="text-[11.5px] text-grey">
+                    {describeSchedule(r.schedule)} · next {fmtDate(r.nextDate)}
+                    {nameOf(t.accountId) ? ` · ${nameOf(t.accountId)}` : ''}
+                  </div>
+                </div>
+                <Badge color={missed ? MONEY.out : due ? MONEY.receivable : MONEY.net}>{missed ? 'Missed' : due ? 'Due' : MODE_OPTS.find((m) => m.value === r.mode)?.label}</Badge>
+                {r.active && (due || missed) && (
+                  <Button size="sm" variant="soft" icon={CheckCircle2} onClick={async () => { await confirmRecurring(r.id); toast('Added to your ledger', { tone: 'success' }); }}>Confirm</Button>
+                )}
+                <button onClick={() => setEditing(r)} title="Edit" className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Pencil size={14} /></button>
+                <button onClick={() => saveRecurring({ ...r, active: !r.active })} title={r.active ? 'Pause' : 'Resume'} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Power size={15} className={r.active ? 'text-money-save' : 'text-muted'} /></button>
+                <button onClick={async () => { if (confirm('Delete this recurring item? Entries already added stay.')) { await removeEntity('recurring', r.id); toast('Deleted', { tone: 'error' }); } }} title="Delete" className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Trash2 size={14} /></button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RecurringForm({ dataset, initial, onDone }: { dataset: Dataset; initial?: Recurring; onDone: () => void }) {
+  const t0 = initial?.template ?? {};
+  const [type, setType] = useState<string>(t0.type ?? 'expense');
+  const [desc, setDesc] = useState(t0.description ?? '');
+  const [amount, setAmount] = useState<number | null>(t0.amountPaise ?? null);
+  const [accountId, setAccountId] = useState(t0.accountId ?? '');
+  const [mode, setMode] = useState<RecurringMode>(initial?.mode ?? 'reminder');
+  const [schedule, setSchedule] = useState(initial?.schedule ?? 'monthly:1');
+  const [nextDate, setNextDate] = useState(initial?.nextDate ?? todayISO());
+  const accountOpts: Option[] = dataset.accounts.filter((a) => a.active).map((a) => ({ value: a.id, label: a.name }));
+
+  const save = async () => {
+    await saveRecurring({
+      ...(initial ?? {}),
+      template: { ...t0, type, description: desc.trim() || undefined, amountPaise: amount ?? 0, accountId: accountId || undefined },
+      schedule,
+      mode,
+      nextDate,
+      active: initial?.active ?? true,
+    });
+    toast(initial ? 'Recurring item updated' : 'Recurring item added', { tone: 'success' });
+    onDone();
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-brand/30 bg-brand/[0.04] p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="What is it?" required><TextField autoFocus value={desc} placeholder="e.g. House rent" onChange={(e) => setDesc(e.target.value)} /></Field>
+        <Field label="Kind"><Dropdown value={type} options={RECURRING_TYPES} onChange={setType} width="100%" /></Field>
+        <Field label="Amount" required><AmountField paise={amount} onPaise={setAmount} /></Field>
+        <Field label="Account"><Dropdown value={accountId} options={accountOpts} onChange={setAccountId} placeholder="Pick an account" width="100%" /></Field>
+      </div>
+      <div className="mt-3"><ScheduleEditor schedule={schedule} onChange={setSchedule} /></div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label="Next date"><DateField value={nextDate} onChange={(e) => setNextDate(e.target.value)} /></Field>
+        <Field label="When it’s due" hint={MODE_HINT[mode]}><Segmented value={mode} options={MODE_OPTS} onChange={setMode} size="sm" /></Field>
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onDone}>Cancel</Button>
+        <Button size="sm" disabled={!desc.trim() || !amount} onClick={save}>{initial ? 'Save changes' : 'Add recurring'}</Button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ goals */
+
+function GoalsSection({ dataset, snapshot }: { dataset: Dataset; snapshot: Snapshot | null }) {
+  const [editing, setEditing] = useState<Goal | 'new' | null>(null);
+  const goals = [...dataset.goals].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
+  const conflicts = goalAllocationConflicts(dataset.goals);
+  const balOf = (id: string) => snapshot?.balances.find((b) => b.account.id === id)?.balancePaise ?? 0;
+  const savedFor = (g: Goal) => (g.linkedAccountIds?.length ? g.linkedAccountIds.reduce((s, id) => s + Math.max(0, balOf(id)), 0) : g.savedPaise ?? 0);
+  const start = dataset.settings?.startDate || undefined;
+  const today = todayISO();
+
+  return (
+    <Card>
+      <CardHeader
+        icon={Target}
+        title="Savings goals"
+        subtitle="Set a target and watch the progress. Link the accounts that hold the money and progress updates itself."
+        accent={MONEY.save}
+        right={<Button size="sm" icon={Plus} onClick={() => setEditing('new')}>Add goal</Button>}
+      />
+      {conflicts.length > 0 && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-money-receivable/30 bg-money-receivable/[0.06] px-3 py-2 text-[12px] text-money-receivable">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          An account is linked to more than one goal, so the same money counts twice. Unlink it from all but one goal to keep progress honest.
+        </div>
+      )}
+      {editing && <GoalForm dataset={dataset} initial={editing === 'new' ? undefined : editing} onDone={() => setEditing(null)} />}
+      {goals.length === 0 && !editing ? (
+        <EmptyState icon={Target} title="No goals yet" hint="e.g. ‘Emergency fund — ₹3,00,000 by December’." compact />
+      ) : (
+        <div className="mt-3 space-y-3">
+          {goals.map((g) => {
+            const saved = savedFor(g);
+            const p = goalProgress(g, { savedPaise: saved, startDate: start, today });
+            return (
+              <div key={g.id} className={`rounded-xl border px-3.5 py-3 ${g.active ? 'border-line bg-white' : 'border-line bg-canvas opacity-60'}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[13.5px] font-semibold text-ink">{g.name}</span>
+                    {g.demo && <Badge color={MONEY.invest}>demo</Badge>}
+                    {p.onTrack != null && <Badge color={p.onTrack ? MONEY.save : MONEY.out}>{p.onTrack ? 'On track' : 'Behind'}</Badge>}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setEditing(g)} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Pencil size={14} /></button>
+                    <button onClick={() => setActive('goals', g.id, !g.active)} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Power size={15} className={g.active ? 'text-money-save' : 'text-muted'} /></button>
+                    <button onClick={async () => { if (confirm('Delete this goal?')) { await removeEntity('goals', g.id); toast('Deleted', { tone: 'error' }); } }} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+                <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-canvas">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, p.pct))}%`, background: MONEY.save }} />
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 text-[11.5px] text-grey">
+                  <span><span className="tnum font-bold text-ink">{fmtINR(saved)}</span> of <span className="tnum">{fmtINR(g.targetPaise)}</span> · {Math.round(p.pct)}%</span>
+                  <span>{p.remainingPaise > 0 ? <><span className="tnum">{fmtINR(p.remainingPaise)}</span> to go</> : 'Reached 🎉'}{g.targetDate ? ` · by ${fmtDate(g.targetDate)}` : ''}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function GoalForm({ dataset, initial, onDone }: { dataset: Dataset; initial?: Goal; onDone: () => void }) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [target, setTarget] = useState<number | null>(initial?.targetPaise ?? null);
+  const [targetDate, setTargetDate] = useState(initial?.targetDate ?? '');
+  const [linked, setLinked] = useState<string[]>(initial?.linkedAccountIds ?? []);
+  const [manualSaved, setManualSaved] = useState<number | null>(initial?.savedPaise ?? null);
+  const accountOpts: Option[] = dataset.accounts.filter((a) => a.active).map((a) => ({ value: a.id, label: a.name }));
+
+  const save = async () => {
+    await saveGoal({
+      ...(initial ?? {}),
+      name: name.trim(),
+      targetPaise: target ?? 0,
+      targetDate: targetDate || undefined,
+      linkedAccountIds: linked.length ? linked : undefined,
+      savedPaise: linked.length ? undefined : manualSaved ?? undefined,
+      active: initial?.active ?? true,
+    });
+    toast(initial ? 'Goal updated' : 'Goal added', { tone: 'success' });
+    onDone();
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-brand/30 bg-brand/[0.04] p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Goal name" required><TextField autoFocus value={name} placeholder="e.g. Emergency fund" onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Target amount" required><AmountField paise={target} onPaise={setTarget} /></Field>
+        <Field label="Target date" hint="Optional — enables on-track tracking."><DateField value={targetDate} onChange={(e) => setTargetDate(e.target.value)} /></Field>
+        <Field label="Linked accounts" hint="Progress follows their balance. Leave empty to track by hand."><MultiSelect label={linked.length ? `${linked.length} linked` : 'Pick accounts'} options={accountOpts} selected={linked} onChange={setLinked} width="100%" /></Field>
+        {linked.length === 0 && <Field label="Saved so far" hint="Set this yourself when no account is linked."><AmountField paise={manualSaved} onPaise={setManualSaved} /></Field>}
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onDone}>Cancel</Button>
+        <Button size="sm" disabled={!name.trim() || !target} onClick={save}>{initial ? 'Save changes' : 'Add goal'}</Button>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------- notifications */
+
+const PREF_ROWS: { key: keyof NotificationPrefs; label: string; hint: string }[] = [
+  { key: 'bills', label: 'Upcoming & missed bills', hint: 'Recurring items due soon or that look missed.' },
+  { key: 'cardDue', label: 'Credit-card balances', hint: 'When a card carries an outstanding balance.' },
+  { key: 'receivables', label: 'Overdue money owed to you', hint: 'When someone is past their due date.' },
+  { key: 'reimbursements', label: 'Pending reimbursements', hint: 'Claimable amounts not yet received.' },
+  { key: 'weeklyClaim', label: 'Ready-to-claim reminder', hint: 'A nudge to file a claim batch.' },
+  { key: 'missingDetails', label: 'Uncategorised entries', hint: 'Transactions still missing a category.' },
+  { key: 'reconciliation', label: 'Reconciliation issues', hint: 'Statement mismatches found on import.' },
+  { key: 'spendingLimit', label: 'Spending-limit alerts', hint: 'When spending passes the limit below.' },
+];
+
+const DEFAULT_PREFS: NotificationPrefs = { bills: true, cardDue: true, receivables: true, reimbursements: true, weeklyClaim: true, missingDetails: true, reconciliation: true, spendingLimit: true };
+
+function AlertsSection({ dataset }: { dataset: Dataset }) {
+  const prefs = dataset.settings?.notificationPrefs ?? DEFAULT_PREFS;
+  const [limit, setLimit] = useState<number | null>(dataset.settings?.spendingLimitPaise ?? null);
+  const setPref = (key: keyof NotificationPrefs, v: boolean) => updateSettings({ notificationPrefs: { ...prefs, [key]: v } });
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader icon={Bell} title="Notifications" subtitle="All quiet and in-dashboard — nothing is ever pushed, emailed or sent off this device." accent={MONEY.card} />
+        <div className="divide-y divide-line">
+          {PREF_ROWS.map((row) => (
+            <div key={row.key} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-ink">{row.label}</div>
+                <div className="text-[11.5px] text-grey">{row.hint}</div>
+              </div>
+              <Toggle checked={prefs[row.key]} onChange={(v) => setPref(row.key, v)} />
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card className="max-w-md">
+        <CardHeader icon={AlertTriangle} title="Monthly spending limit" subtitle="Optional. You’ll get an alert when spending in the current range passes this." accent={MONEY.out} />
+        <div className="flex items-end gap-2">
+          <div className="flex-1"><AmountField paise={limit} onPaise={setLimit} /></div>
+          <Button variant="soft" onClick={() => { updateSettings({ spendingLimitPaise: limit ?? undefined }); toast('Saved', { tone: 'success' }); }}>Save</Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ data */
 
+function BackupCard({ dataset }: { dataset: Dataset }) {
+  const [busy, setBusy] = useState(false);
+  const last = dataset.settings?.lastBackupAt;
+  const stale = !last || Date.now() - last > 14 * 864e5;
+  const download = async () => {
+    setBusy(true);
+    try {
+      const backup = await exportBackup();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kosh-backup-${todayISO()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await updateSettings({ lastBackupAt: Date.now() });
+      toast('Backup downloaded', { tone: 'success' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader icon={Download} title="Download a backup" subtitle="One JSON file with everything — accounts, transactions, settings and attachments. Keep it somewhere safe off this device." accent={MONEY.save} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className={`flex items-center gap-1.5 text-[12px] ${stale ? 'text-money-receivable' : 'text-grey'}`}>
+          <Clock size={14} />
+          {last ? `Last backup ${new Date(last).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : 'No backup yet'}
+          {stale ? ' · a fresh one is a good idea' : ''}
+        </div>
+        <Button icon={Download} disabled={busy} onClick={download}>Download backup</Button>
+      </div>
+    </Card>
+  );
+}
+
+function RestoreCard() {
+  const [file, setFile] = useState<File | null>(null);
+  const [parsed, setParsed] = useState<unknown>(null);
+  const [summary, setSummary] = useState<RestoreSummary | null>(null);
+  const [mode, setMode] = useState<'merge' | 'replace'>('merge');
+  const [busy, setBusy] = useState(false);
+
+  const pick = async (f: File) => {
+    setFile(f);
+    try {
+      const data = await loadBackupFromFile(f);
+      setParsed(data);
+      setSummary(inspectBackup(data));
+    } catch (e) {
+      setParsed(null);
+      setSummary({ valid: false, error: String((e as Error).message ?? e), counts: {}, total: 0 });
+    }
+  };
+
+  const run = async () => {
+    if (!summary?.valid || !parsed) return;
+    const detail = mode === 'replace'
+      ? `REPLACE everything with ${summary.total} records from the backup. Anything not in the backup will be erased.`
+      : `merge ${summary.total} records into your data. Records with the same id are updated; everything else is kept.`;
+    if (!confirm(`Restore this backup? This will ${detail}`)) return;
+    setBusy(true);
+    try {
+      await restoreBackup(parsed as Backup, mode);
+      toast('Backup restored', { tone: 'success' });
+      setFile(null);
+      setParsed(null);
+      setSummary(null);
+    } catch (e) {
+      toast(String((e as Error).message ?? e), { tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader icon={UploadCloud} title="Restore from a backup" subtitle="Bring your data back on a new device or after clearing your browser. You choose how it’s applied — nothing is overwritten without confirmation." accent={MONEY.net} />
+      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line bg-canvas py-4 text-[12.5px] font-semibold text-slate transition hover:border-brand/40">
+        <UploadCloud size={16} /> {file ? file.name : 'Choose a Kosh backup (.json)'}
+        <input type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
+      </label>
+      {summary && !summary.valid && <p className="mt-2 text-[12px] font-semibold text-money-out">{summary.error}</p>}
+      {summary?.valid && (
+        <div className="mt-3 space-y-3">
+          <div className="rounded-xl border border-line bg-canvas px-3 py-2 text-[12px] text-slate">
+            <span className="tnum font-bold text-ink">{summary.total}</span> records · schema v{summary.schemaVersion}
+            {summary.exportedAt ? ` · exported ${new Date(summary.exportedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : ''}
+            {summary.schemaVersion != null && summary.schemaVersion > SCHEMA_VERSION && <span className="ml-1 text-money-receivable">· newer app version — some data may not load</span>}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Field label="How to apply">
+              <Segmented value={mode} options={[{ value: 'merge', label: 'Merge' }, { value: 'replace', label: 'Replace all' }]} onChange={(v) => setMode(v as 'merge' | 'replace')} size="sm" />
+            </Field>
+            <Button icon={UploadCloud} disabled={busy} onClick={run}>{busy ? 'Restoring…' : 'Restore backup'}</Button>
+          </div>
+          <p className="text-[11px] text-muted">{mode === 'replace' ? 'Replace erases current data first, then loads the backup.' : 'Merge keeps everything you have and adds or updates from the backup.'}</p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function DataSection({ dataset }: { dataset: Dataset }) {
+  const app = useApp();
   const hasDemo = dataset.accounts.some((a) => a.demo) || dataset.transactions.some((t) => t.demo);
   const [busy, setBusy] = useState(false);
 
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader icon={UploadCloud} title="Import a statement" subtitle="Bring in a bank or card statement (CSV, Excel or a text PDF), map the columns once, and reconcile it against what you already have." accent={MONEY.net} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[12.5px] text-slate">Nothing is added until you review it — matches, duplicates and balance checks are shown first.</p>
+          <Button icon={UploadCloud} onClick={() => app.openImport()}>Import statement</Button>
+        </div>
+      </Card>
+
+      <BackupCard dataset={dataset} />
+      <RestoreCard />
+
       <Card>
         <CardHeader icon={Sparkles} title="Demo data" subtitle="Explore the app with realistic sample records — clearly tagged, never mixed with your real data." accent={MONEY.invest} />
         {hasDemo ? (
@@ -534,8 +992,8 @@ function DataSection({ dataset }: { dataset: Dataset }) {
       </Card>
 
       <p className="px-1 text-[11.5px] leading-snug text-muted">
-        Your data lives only in this browser (IndexedDB). It is never uploaded. Clearing your browser’s site data will remove it, so treat this as a
-        local notebook.
+        Your data lives only in this browser (IndexedDB) and is never uploaded. That also means browser storage is <span className="font-semibold text-slate">not a backup</span> —
+        clearing site data, switching devices or a browser update can wipe it. Download a backup regularly and keep the file somewhere off this device.
       </p>
     </div>
   );

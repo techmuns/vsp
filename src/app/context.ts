@@ -23,6 +23,10 @@ export interface AppApi {
   openEditor: (arg?: EditorArg) => void;
   /** Jump to the Transactions page with an initial filter applied. */
   openTransactions: (filter?: Partial<TxnFilter>) => void;
+  /** Open the guided statement importer overlay. */
+  openImport: () => void;
+  /** Open the optional AI batch categoriser overlay. */
+  openAi: () => void;
 }
 
 export const AppContext = createContext<AppApi>({
@@ -30,6 +34,8 @@ export const AppContext = createContext<AppApi>({
   openQuickAdd: () => {},
   openEditor: () => {},
   openTransactions: () => {},
+  openImport: () => {},
+  openAi: () => {},
 });
 
 export const useApp = (): AppApi => useContext(AppContext);

@@ -15,3 +15,8 @@ export * from './events';
 export * from './summarize';
 export * from './people';
 export * from './breakdown';
+export * from './recurring';
+export * from './goals';
+export * from './reconcile';
+export * from './insights';
+export * from './notifications';

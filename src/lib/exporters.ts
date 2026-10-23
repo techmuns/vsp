@@ -20,6 +20,26 @@ export async function exportCsv(filename: string, rows: Row[]): Promise<void> {
   downloadBlob(blob, filename.endsWith('.csv') ? filename : `${filename}.csv`);
 }
 
+/** A report export with an Info sheet (date range + active filters) + a Data
+ *  sheet. The data rows reconcile with what's on screen; the Info sheet is the
+ *  "export header". */
+export async function exportReportXlsx(filename: string, meta: Row[], data: Row[]): Promise<void> {
+  const XLSX = await import('xlsx');
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(meta), 'Info');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Report');
+  XLSX.writeFile(wb, filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`);
+}
+
+/** CSV report: the meta block, a blank line, then the data. */
+export async function exportReportCsv(filename: string, meta: Row[], data: Row[]): Promise<void> {
+  const XLSX = await import('xlsx');
+  const metaCsv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(meta));
+  const dataCsv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(data));
+  const blob = new Blob([metaCsv + '\n\n' + dataCsv], { type: 'text/csv;charset=utf-8;' });
+  downloadBlob(blob, filename.endsWith('.csv') ? filename : `${filename}.csv`);
+}
+
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
