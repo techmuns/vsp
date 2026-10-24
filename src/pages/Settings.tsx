@@ -467,21 +467,26 @@ function Reimbursements({ dataset }: { dataset: Dataset }) {
 
 function PolicyForm({ dataset, onDone }: { dataset: Dataset; onDone: () => void }) {
   const [name, setName] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [purposeId, setPurposeId] = useState('');
   const [percent, setPercent] = useState('50');
   const [cap, setCap] = useState<number | null>(null);
+  const categoryOpts: Option[] = dataset.categories.filter((c) => c.active && !c.parentId && c.kind === 'expense').map((c) => ({ value: c.id, label: c.name }));
   const purposeOpts: Option[] = dataset.purposes.filter((p) => p.active).map((p) => ({ value: p.id, label: p.name }));
 
   return (
     <div className="mt-3 rounded-xl border border-brand/30 bg-brand/[0.04] p-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Policy name" required>
+        <Field label="Policy name" required hint="Just a label so you recognise this rule.">
           <TextField autoFocus value={name} placeholder="e.g. Office travel" onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Applies to purpose" hint="Leave blank to match any purpose.">
+        <Field label="Applies to category" hint="The spending category this rule watches. Leave blank for any.">
+          <Dropdown value={categoryId} options={categoryOpts} onChange={setCategoryId} placeholder="Any category" width="100%" />
+        </Field>
+        <Field label="Applies to purpose" hint="Optional — narrow it further (e.g. Office). Leave blank for any.">
           <Dropdown value={purposeId} options={purposeOpts} onChange={setPurposeId} placeholder="Any purpose" width="100%" />
         </Field>
-        <Field label="Percent back">
+        <Field label="Percent back" hint="How much of the spend you can claim.">
           <TextField type="number" min={0} max={100} value={percent} onChange={(e) => setPercent(e.target.value)} />
         </Field>
         <Field label="Cap per claim" hint="Optional maximum.">
@@ -498,6 +503,7 @@ function PolicyForm({ dataset, onDone }: { dataset: Dataset; onDone: () => void 
           onClick={async () => {
             await savePolicy({
               name: name.trim(),
+              matchCategoryId: categoryId || undefined,
               matchPurposeId: purposeId || undefined,
               percent: percent ? Math.max(0, Math.min(100, parseInt(percent, 10))) : undefined,
               maxPaise: cap ?? undefined,
