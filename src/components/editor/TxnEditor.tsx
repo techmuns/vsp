@@ -65,13 +65,13 @@ function fromTxn(txn: Transaction, splits: Split[]): Draft {
   };
 }
 
-function fromPrefill(prefill?: Partial<Transaction>): Draft {
+function fromPrefill(prefill?: Partial<Transaction>, defaultAccountId = ''): Draft {
   return {
     type: prefill?.type ?? 'expense',
     amountPaise: prefill?.amountPaise ?? null,
     date: prefill?.date ?? todayISO(),
     description: prefill?.description ?? '',
-    accountId: prefill?.accountId ?? '',
+    accountId: prefill?.accountId ?? defaultAccountId,
     counterAccountId: prefill?.counterAccountId ?? '',
     categoryId: prefill?.categoryId ?? '',
     subcategoryId: '',
@@ -101,11 +101,12 @@ export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg:
   const existing = arg.txnId ? dataset.transactions.find((t) => t.id === arg.txnId) : undefined;
   const existingSplits = useMemo(() => (arg.txnId ? dataset.splits.filter((s) => s.txnId === arg.txnId) : []), [arg.txnId, dataset.splits]);
 
-  const [d, setD] = useState<Draft>(() => (existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill)));
+  const defaultAccountId = dataset.accounts.find((a) => a.active)?.id ?? '';
+  const [d, setD] = useState<Draft>(() => (existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill, defaultAccountId)));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setD(existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill));
+    if (open) setD(existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill, defaultAccountId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, arg.txnId]);
 

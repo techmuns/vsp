@@ -78,25 +78,42 @@ export default function People({ dataset, range }: { dataset: Dataset; snapshot:
           <EmptyState icon={Users} title="No people yet" hint="Add people you lend to, borrow from, or split expenses with." action={<Button icon={Plus} onClick={async () => { const n = await askPrompt({ title: 'Add a person', placeholder: 'Name', confirmLabel: 'Add' }); if (n?.trim()) await savePerson({ name: n.trim() }); }}>Add person</Button>} />
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.map(({ person, pos }) => {
-            const settled = pos.netPaise === 0;
-            const theyOwe = pos.netPaise > 0;
-            const color = settled ? MONEY.transfer : theyOwe ? MONEY.receivable : MONEY.payable;
-            return (
-              <button key={person.id} onClick={() => setOpenPerson(person.id)} className="flex items-center gap-3 rounded-2xl border border-line bg-white p-3.5 text-left shadow-card transition hover:shadow-card-hover focus-ring">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl font-display text-[15px] font-bold" style={{ background: `${color}18`, color }}>
-                  {person.name.slice(0, 1).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold text-ink">{person.name}</span>
-                  <span className="block text-[11.5px]" style={{ color }}>{settled ? 'Settled up' : theyOwe ? 'Owes you' : 'You owe'}</span>
-                </span>
-                <span className="tnum shrink-0 text-right font-display text-[15px] font-extrabold" style={{ color }}>{settled ? '—' : fmtINR(Math.abs(pos.netPaise))}</span>
-              </button>
-            );
-          })}
-        </div>
+        <Card pad={false}>
+          <div className="nice-scroll overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-line text-[10.5px] font-bold uppercase tracking-wide text-grey">
+                  <th className="px-4 py-2.5 text-left">Person</th>
+                  <th className="px-4 py-2.5 text-left">Status</th>
+                  <th className="px-4 py-2.5 text-right">Owed to you</th>
+                  <th className="px-4 py-2.5 text-right">You owe</th>
+                  <th className="px-4 py-2.5 text-right">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ person, pos }) => {
+                  const settled = pos.netPaise === 0;
+                  const theyOwe = pos.netPaise > 0;
+                  const color = settled ? MONEY.transfer : theyOwe ? MONEY.receivable : MONEY.payable;
+                  return (
+                    <tr key={person.id} onClick={() => setOpenPerson(person.id)} className="cursor-pointer border-b border-line/60 transition last:border-0 hover:bg-canvas">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg font-display text-[13px] font-bold" style={{ background: `${color}18`, color }}>{person.name.slice(0, 1).toUpperCase()}</span>
+                          <span className="truncate font-semibold text-ink">{person.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-[12.5px] font-medium" style={{ color }}>{settled ? 'Settled up' : theyOwe ? 'Owes you' : 'You owe'}</td>
+                      <td className="tnum px-4 py-2.5 text-right" style={{ color: pos.receivablePaise > 0 ? MONEY.receivable : '#94A3B8' }}>{pos.receivablePaise > 0 ? fmtINR(pos.receivablePaise) : '—'}</td>
+                      <td className="tnum px-4 py-2.5 text-right" style={{ color: pos.payablePaise > 0 ? MONEY.payable : '#94A3B8' }}>{pos.payablePaise > 0 ? fmtINR(pos.payablePaise) : '—'}</td>
+                      <td className="tnum px-4 py-2.5 text-right font-bold" style={{ color }}>{settled ? '—' : fmtINR(Math.abs(pos.netPaise))}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {openPerson && <PersonDrawer personId={openPerson} dataset={dataset} eInput={eInput} asOf={asOf} onClose={() => setOpenPerson(null)} />}

@@ -43,13 +43,13 @@ interface Draft {
   splits: SplitRow[];
 }
 
-function initialDraft(prefill?: QuickAddPrefill): Draft {
+function initialDraft(prefill?: QuickAddPrefill, defaultAccountId = ''): Draft {
   return {
     type: prefill?.type ?? 'expense',
     amountPaise: null,
     date: todayISO(),
     description: '',
-    accountId: prefill?.accountId ?? '',
+    accountId: prefill?.accountId ?? defaultAccountId,
     counterAccountId: '',
     categoryId: prefill?.categoryId ?? '',
     subcategoryId: '',
@@ -69,13 +69,14 @@ function initialDraft(prefill?: QuickAddPrefill): Draft {
 }
 
 export function QuickAdd({ open, prefill, onClose, dataset }: { open: boolean; prefill?: QuickAddPrefill; onClose: () => void; dataset: Dataset }) {
-  const [d, setD] = useState<Draft>(() => initialDraft(prefill));
+  const defaultAccountId = dataset.accounts.find((a) => a.active)?.id ?? '';
+  const [d, setD] = useState<Draft>(() => initialDraft(prefill, defaultAccountId));
   const [showMore, setShowMore] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setD(initialDraft(prefill));
+      setD(initialDraft(prefill, defaultAccountId));
       setShowMore(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
