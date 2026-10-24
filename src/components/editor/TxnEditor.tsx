@@ -8,6 +8,7 @@ import { MONEY, colorForId } from '../../lib/brand';
 import { fmtINR } from '../../lib/format';
 import { todayISO } from '../../db/ids';
 import { toast } from '../../app/toast';
+import { askConfirm } from '../../app/confirm';
 import { AmountField, Button, DateField, Dropdown, Field, TextArea, TextField, Toggle, type Option } from '../ui/Controls';
 import { CreatableSelect } from '../quickadd/CreatableSelect';
 import { AccountCreateForm, InvestmentCreateForm } from '../quickadd/createForms';
@@ -206,7 +207,7 @@ export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg:
 
   async function handleDelete() {
     if (!existing) return;
-    if (!confirm('Delete this transaction permanently? Voiding keeps it in history instead.')) return;
+    if (!(await askConfirm({ title: 'Delete permanently?', message: 'Voiding keeps it in history instead.', danger: true, confirmLabel: 'Delete' }))) return;
     await deleteTransaction(existing.id);
     onClose();
     toast('Transaction deleted', { tone: 'error' });

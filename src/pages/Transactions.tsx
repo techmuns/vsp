@@ -37,6 +37,7 @@ import { addTransaction, deleteTransaction, removeTxnFilter, saveTxnFilter, upda
 import { getSplits } from '../db/repo';
 import { exportCsv, exportXlsx, type Row } from '../lib/exporters';
 import { toast } from '../app/toast';
+import { askConfirm, askPrompt } from '../app/confirm';
 import { Card, PageHeader, Badge, EmptyState } from '../components/ui/Card';
 import { Button, Dropdown, MultiSelect, TextField, AmountField, type Option } from '../components/ui/Controls';
 
@@ -369,7 +370,7 @@ function RowMenu({ t, onEdit, onLink }: { t: Transaction; onEdit: () => void; on
           <Item icon={Copy} label="Duplicate" onClick={duplicate} />
           <Item icon={Link2} label="Link to…" onClick={onLink} />
           {!t.voided && <Item icon={Ban} label="Void" onClick={async () => { await voidTransaction(t.id); toast('Voided', { actionLabel: 'Undo', onAction: () => updateTransaction(t.id, { voided: false }) }); }} />}
-          <Item icon={Trash2} label="Delete" danger onClick={async () => { if (confirm('Delete permanently?')) { await deleteTransaction(t.id); toast('Deleted', { tone: 'error' }); } }} />
+          <Item icon={Trash2} label="Delete" danger onClick={async () => { if (await askConfirm({ title: 'Delete permanently?', message: 'Voiding keeps it in history instead.', danger: true, confirmLabel: 'Delete' })) { await deleteTransaction(t.id); toast('Deleted', { tone: 'error' }); } }} />
         </div>
       )}
     </div>
@@ -467,7 +468,7 @@ function SavedFilters({ dataset, filter, onApply }: { dataset: Dataset; filter: 
             </div>
           ))}
           <button
-            onClick={async () => { const name = prompt('Save this filter as:'); if (name?.trim()) { await saveTxnFilter(name.trim(), filter as unknown as Record<string, unknown>); toast('Filter saved', { tone: 'success' }); } setOpen(false); }}
+            onClick={async () => { const name = await askPrompt({ title: 'Save this filter', placeholder: 'e.g. Office expenses', confirmLabel: 'Save' }); if (name?.trim()) { await saveTxnFilter(name.trim(), filter as unknown as Record<string, unknown>); toast('Filter saved', { tone: 'success' }); } setOpen(false); }}
             className="mt-1 flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-[12.5px] font-semibold text-brand hover:bg-canvas"
           >
             <Save size={14} /> Save current filter
@@ -491,8 +492,8 @@ function BulkBar({ dataset, count, ids, onDone }: { dataset: Dataset; count: num
       <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-ink"><CheckSquare size={15} className="text-brand" /> {count} selected</span>
       <div style={{ width: 170 }}><Dropdown value="" options={catOpts} placeholder="Set category…" onChange={(v) => bulk({ categoryId: v })} size="sm" width="100%" /></div>
       <div style={{ width: 160 }}><Dropdown value="" options={purposeOpts} placeholder="Set purpose…" onChange={(v) => bulk({ purposeId: v })} size="sm" width="100%" /></div>
-      <Button variant="outline" size="sm" onClick={async () => { const tag = prompt('Add tag to selected:'); if (tag?.trim()) { for (const id of ids) { const t = dataset.transactions.find((x) => x.id === id); await updateTransaction(id, { tags: [...new Set([...(t?.tags ?? []), tag.trim()])] }); } toast(`Tagged ${ids.length}`, { tone: 'success' }); onDone(); } }}>Add tag</Button>
-      <Button variant="danger" size="sm" icon={Trash2} onClick={async () => { if (confirm(`Delete ${count} transactions permanently?`)) { for (const id of ids) await deleteTransaction(id); toast(`Deleted ${count}`, { tone: 'error' }); onDone(); } }}>Delete</Button>
+      <Button variant="outline" size="sm" onClick={async () => { const tag = await askPrompt({ title: 'Add a tag', message: `Applied to the ${ids.length} selected.`, placeholder: 'Tag name', confirmLabel: 'Add tag' }); if (tag?.trim()) { for (const id of ids) { const t = dataset.transactions.find((x) => x.id === id); await updateTransaction(id, { tags: [...new Set([...(t?.tags ?? []), tag.trim()])] }); } toast(`Tagged ${ids.length}`, { tone: 'success' }); onDone(); } }}>Add tag</Button>
+      <Button variant="danger" size="sm" icon={Trash2} onClick={async () => { if (await askConfirm({ title: `Delete ${count} transactions?`, message: 'This cannot be undone.', danger: true, confirmLabel: 'Delete' })) { for (const id of ids) await deleteTransaction(id); toast(`Deleted ${count}`, { tone: 'error' }); onDone(); } }}>Delete</Button>
       <Button variant="ghost" size="sm" onClick={onDone}>Clear selection</Button>
     </Card>
   );

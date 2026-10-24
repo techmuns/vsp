@@ -254,6 +254,7 @@ const DEMO_TABLES = [
   'investments',
   'holdingLots',
   'investmentTxns',
+  'prices', // in scope so the orphan-price cleanup below can run in the same txn
   'goals',
   'budgets',
   'recurring',

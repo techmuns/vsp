@@ -12,6 +12,7 @@ import { MONEY } from '../lib/brand';
 import { fmtINR, fmtDate, fmtRange } from '../lib/format';
 import { exportXlsx, printDocument, esc, type Row } from '../lib/exporters';
 import { toast } from '../app/toast';
+import { askConfirm } from '../app/confirm';
 import { Card, PageHeader, CardHeader, Badge, EmptyState } from '../components/ui/Card';
 import { SubTabs } from '../components/ui/Tabs';
 import { Button, AmountField, DateField, Dropdown, Field, TextField, type Option } from '../components/ui/Controls';
@@ -86,7 +87,7 @@ function Policies({ dataset }: { dataset: Dataset }) {
                 </button>
                 {p.demo && <Badge color={MONEY.invest}>demo</Badge>}
                 <button onClick={() => setActive('reimbursementPolicies', p.id, !p.active)} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Power size={15} className={p.active ? 'text-money-save' : 'text-muted'} /></button>
-                <button onClick={async () => { if (confirm('Delete this policy?')) { await removeEntity('reimbursementPolicies', p.id); toast('Policy deleted', { tone: 'error' }); } }} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:text-money-out"><Trash2 size={15} /></button>
+                <button onClick={async () => { if (await askConfirm({ title: 'Delete this policy?', danger: true, confirmLabel: 'Delete' })) { await removeEntity('reimbursementPolicies', p.id); toast('Policy deleted', { tone: 'error' }); } }} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:text-money-out"><Trash2 size={15} /></button>
               </div>
             );
           })}
@@ -278,7 +279,7 @@ function Claims({ dataset }: { dataset: Dataset }) {
                 <button onClick={() => copySummary(c)} title="Copy summary" className="grid h-8 w-8 place-items-center rounded-lg border border-line text-grey hover:border-brand/40"><Copy size={14} /></button>
                 <button onClick={() => exportClaim(c)} title="Export" className="grid h-8 w-8 place-items-center rounded-lg border border-line text-grey hover:border-brand/40"><FileDown size={14} /></button>
                 <button onClick={() => printClaim(c)} title="Print" className="grid h-8 w-8 place-items-center rounded-lg border border-line text-grey hover:border-brand/40"><Printer size={14} /></button>
-                <button onClick={async () => { if (confirm('Delete this claim? (The expenses stay.)')) { await deleteClaim(c.id); toast('Claim deleted', { tone: 'error' }); } }} className="grid h-8 w-8 place-items-center rounded-lg border border-line text-grey hover:text-money-out"><Trash2 size={14} /></button>
+                <button onClick={async () => { if (await askConfirm({ title: 'Delete this claim?', message: 'The expenses themselves stay.', danger: true, confirmLabel: 'Delete' })) { await deleteClaim(c.id); toast('Claim deleted', { tone: 'error' }); } }} className="grid h-8 w-8 place-items-center rounded-lg border border-line text-grey hover:text-money-out"><Trash2 size={14} /></button>
               </div>
             </div>
           </Card>

@@ -23,6 +23,7 @@ import { todayISO } from '../db/ids';
 import { addTransaction, savePerson } from '../db/repo';
 import { exportCsv, exportXlsx, printDocument, esc, type Row } from '../lib/exporters';
 import { toast } from '../app/toast';
+import { askPrompt } from '../app/confirm';
 import { Card, PageHeader, EmptyState } from '../components/ui/Card';
 import { Button, AmountField, DateField, Dropdown, Field, Toggle, type Option } from '../components/ui/Controls';
 
@@ -53,7 +54,7 @@ export default function People({ dataset, range }: { dataset: Dataset; snapshot:
         title="People"
         subtitle="Who owes you, and whom you owe."
         accent={MONEY.receivable}
-        right={<Button size="sm" icon={Plus} onClick={async () => { const n = prompt('New person name:'); if (n?.trim()) { await savePerson({ name: n.trim() }); toast('Person added', { tone: 'success' }); } }}>Add person</Button>}
+        right={<Button size="sm" icon={Plus} onClick={async () => { const n = await askPrompt({ title: 'Add a person', placeholder: 'Name', confirmLabel: 'Add' }); if (n?.trim()) { await savePerson({ name: n.trim() }); toast('Person added', { tone: 'success' }); } }}>Add person</Button>}
       />
 
       <div className="grid grid-cols-3 gap-3">
@@ -74,7 +75,7 @@ export default function People({ dataset, range }: { dataset: Dataset; snapshot:
 
       {empty ? (
         <Card>
-          <EmptyState icon={Users} title="No people yet" hint="Add people you lend to, borrow from, or split expenses with." action={<Button icon={Plus} onClick={async () => { const n = prompt('New person name:'); if (n?.trim()) await savePerson({ name: n.trim() }); }}>Add person</Button>} />
+          <EmptyState icon={Users} title="No people yet" hint="Add people you lend to, borrow from, or split expenses with." action={<Button icon={Plus} onClick={async () => { const n = await askPrompt({ title: 'Add a person', placeholder: 'Name', confirmLabel: 'Add' }); if (n?.trim()) await savePerson({ name: n.trim() }); }}>Add person</Button>} />
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -52,6 +52,7 @@ import { colorForId, MONEY } from '../lib/brand';
 import { fmtINR, fmtDate } from '../lib/format';
 import { todayISO } from '../db/ids';
 import { toast } from '../app/toast';
+import { askConfirm } from '../app/confirm';
 import { Card, CardHeader, PageHeader, Badge, EmptyState } from '../components/ui/Card';
 import { SubTabs } from '../components/ui/Tabs';
 import { AmountField, Button, DateField, Dropdown, Field, MultiSelect, Segmented, TextField, Toggle, type Option } from '../components/ui/Controls';
@@ -600,7 +601,7 @@ function RecurringSection({ dataset }: { dataset: Dataset }) {
                 )}
                 <button onClick={() => setEditing(r)} title="Edit" className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Pencil size={14} /></button>
                 <button onClick={() => saveRecurring({ ...r, active: !r.active })} title={r.active ? 'Pause' : 'Resume'} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Power size={15} className={r.active ? 'text-money-save' : 'text-muted'} /></button>
-                <button onClick={async () => { if (confirm('Delete this recurring item? Entries already added stay.')) { await removeEntity('recurring', r.id); toast('Deleted', { tone: 'error' }); } }} title="Delete" className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Trash2 size={14} /></button>
+                <button onClick={async () => { if (await askConfirm({ title: 'Delete recurring item?', message: 'Entries already added stay in your ledger.', danger: true, confirmLabel: 'Delete' })) { await removeEntity('recurring', r.id); toast('Deleted', { tone: 'error' }); } }} title="Delete" className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Trash2 size={14} /></button>
               </div>
             );
           })}
@@ -700,7 +701,7 @@ function GoalsSection({ dataset, snapshot }: { dataset: Dataset; snapshot: Snaps
                   <div className="flex items-center gap-1">
                     <button onClick={() => setEditing(g)} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Pencil size={14} /></button>
                     <button onClick={() => setActive('goals', g.id, !g.active)} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Power size={15} className={g.active ? 'text-money-save' : 'text-muted'} /></button>
-                    <button onClick={async () => { if (confirm('Delete this goal?')) { await removeEntity('goals', g.id); toast('Deleted', { tone: 'error' }); } }} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Trash2 size={14} /></button>
+                    <button onClick={async () => { if (await askConfirm({ title: 'Delete this goal?', danger: true, confirmLabel: 'Delete' })) { await removeEntity('goals', g.id); toast('Deleted', { tone: 'error' }); } }} className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"><Trash2 size={14} /></button>
                   </div>
                 </div>
                 <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-canvas">
@@ -867,7 +868,7 @@ function RestoreCard() {
     const detail = mode === 'replace'
       ? `REPLACE everything with ${summary.total} records from the backup. Anything not in the backup will be erased.`
       : `merge ${summary.total} records into your data. Records with the same id are updated; everything else is kept.`;
-    if (!confirm(`Restore this backup? This will ${detail}`)) return;
+    if (!(await askConfirm({ title: 'Restore this backup?', message: `This will ${detail}`, confirmLabel: 'Restore', danger: mode === 'replace' }))) return;
     setBusy(true);
     try {
       await restoreBackup(parsed as Backup, mode);
@@ -938,10 +939,11 @@ function DataSection({ dataset }: { dataset: Dataset }) {
               icon={Trash2}
               disabled={busy}
               onClick={async () => {
-                if (confirm('Remove all demo data? Your real records are kept.')) {
+                if (await askConfirm({ title: 'Remove demo data?', message: 'The sample accounts and transactions are deleted. Anything you added yourself is kept.', danger: true, confirmLabel: 'Remove demo data' })) {
                   setBusy(true);
                   try {
                     await clearDemoData();
+                    toast('Demo data removed', { tone: 'success' });
                   } finally {
                     setBusy(false);
                   }
@@ -981,8 +983,9 @@ function DataSection({ dataset }: { dataset: Dataset }) {
             variant="danger"
             icon={Trash2}
             onClick={async () => {
-              if (confirm('Erase ALL data permanently? This cannot be undone.')) {
+              if (await askConfirm({ title: 'Erase everything?', message: 'All accounts, transactions and settings are permanently deleted. This cannot be undone.', danger: true, confirmLabel: 'Erase everything' })) {
                 await wipeAll();
+                toast('All data erased', { tone: 'error' });
               }
             }}
           >
