@@ -105,6 +105,16 @@ export async function savePurpose(input: Partial<Purpose> & { name: string }): P
   return rec;
 }
 
+/** Find a purpose by name (case-insensitive), creating it if it doesn't exist. */
+export async function ensurePurpose(name: string): Promise<string> {
+  const existing = (await db.purposes.toArray()).find((p) => p.name.toLowerCase() === name.trim().toLowerCase());
+  if (existing) {
+    if (!existing.active) await db.purposes.update(existing.id, { active: true, updatedAt: nowTs() });
+    return existing.id;
+  }
+  return (await savePurpose({ name: name.trim() })).id;
+}
+
 export async function savePolicy(input: Partial<ReimbursementPolicy> & { name: string }): Promise<ReimbursementPolicy> {
   const rec = stamp<Partial<ReimbursementPolicy>>(input, 'pol') as ReimbursementPolicy;
   await db.reimbursementPolicies.put(rec);
