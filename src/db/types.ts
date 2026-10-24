@@ -95,6 +95,8 @@ export interface Category {
   name: string;
   parentId?: ID; // category → subcategory via parentId
   colorKey?: string;
+  /** Optional default purpose (e.g. Office / Personal) auto-applied to entries in this category. */
+  defaultPurposeId?: ID;
   kind: CategoryKind;
   icon?: string;
   active: boolean;

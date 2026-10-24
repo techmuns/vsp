@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Copy, Trash2, Ban, Pencil } from 'lucide-react';
+import { X, Copy, Trash2, Ban, Pencil, ChevronDown } from 'lucide-react';
 import type { Dataset } from '../../db/hooks';
 import type { Split, Transaction, TxnStatus } from '../../db/types';
 import { addTransaction, deleteTransaction, saveCategory, saveEvent, savePerson, savePurpose, updateTransaction, voidTransaction } from '../../db/repo';
@@ -104,9 +104,10 @@ export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg:
   const defaultAccountId = dataset.accounts.find((a) => a.active)?.id ?? '';
   const [d, setD] = useState<Draft>(() => (existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill, defaultAccountId)));
   const [saving, setSaving] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
-    if (open) setD(existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill, defaultAccountId));
+    if (open) { setD(existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill, defaultAccountId)); setShowMore(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, arg.txnId]);
 
@@ -300,7 +301,7 @@ export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg:
             {fields.category && !d.splitMode && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Category">
-                  <CreatableSelect value={d.categoryId} onChange={(v) => set('categoryId', v)} options={categoryOpts} placeholder="Pick" createNoun="category" onCreate={async (name) => (await saveCategory({ name, kind: isIncomeKind ? 'income' : 'expense' })).id} />
+                  <CreatableSelect value={d.categoryId} onChange={(v) => { const dp = dataset.categories.find((c) => c.id === v)?.defaultPurposeId; setD((p) => ({ ...p, categoryId: v, ...(dp ? { purposeId: dp } : {}) })); }} options={categoryOpts} placeholder="Pick" createNoun="category" onCreate={async (name) => (await saveCategory({ name, kind: isIncomeKind ? 'income' : 'expense' })).id} />
                 </Field>
                 <Field label="Subcategory">
                   {d.categoryId ? (
@@ -319,14 +320,11 @@ export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg:
               </div>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Purpose">
+            {fields.category && !d.splitMode && (
+              <Field label="Purpose" hint="Office / Personal — auto-fills from the category; change it only if needed.">
                 <CreatableSelect value={d.purposeId} onChange={(v) => set('purposeId', v)} options={purposeOpts} placeholder="Office / Personal…" createNoun="purpose" onCreate={async (name) => (await savePurpose({ name })).id} />
               </Field>
-              <Field label="Event">
-                <CreatableSelect value={d.eventId} onChange={(v) => set('eventId', v)} options={eventOpts} placeholder="Optional" createNoun="event" onCreate={async (name) => (await saveEvent({ name })).id} />
-              </Field>
-            </div>
+            )}
 
             {(def?.group === 'spend' || def?.group === 'card' || isIncomeKind) && (
               <div className="flex items-center justify-between rounded-xl border border-line bg-canvas/60 px-3 py-2.5">
@@ -351,17 +349,30 @@ export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg:
               </div>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Tags" hint="Comma separated">
-                <TextField value={d.tags} placeholder="trip, emi…" onChange={(e) => set('tags', e.target.value)} />
-              </Field>
-              <Field label="Reference">
-                <TextField value={d.reference} placeholder="UPI / invoice ref" onChange={(e) => set('reference', e.target.value)} />
-              </Field>
+            <div className="overflow-hidden rounded-xl border border-line">
+              <button type="button" onClick={() => setShowMore((s) => !s)} className="flex w-full items-center justify-between px-3 py-2.5 text-[12.5px] font-semibold text-slate transition hover:bg-canvas">
+                <span>More details <span className="font-normal text-muted">· event, tags, reference, notes</span></span>
+                <ChevronDown size={16} className={`text-grey transition ${showMore ? 'rotate-180' : ''}`} />
+              </button>
+              {showMore && (
+                <div className="space-y-3 border-t border-line px-3 py-3">
+                  <Field label="Event" hint="Optional — group entries under one trip or occasion (e.g. ‘Goa trip’).">
+                    <CreatableSelect value={d.eventId} onChange={(v) => set('eventId', v)} options={eventOpts} placeholder="Optional" createNoun="event" onCreate={async (name) => (await saveEvent({ name })).id} />
+                  </Field>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Tags" hint="Comma separated">
+                      <TextField value={d.tags} placeholder="trip, emi…" onChange={(e) => set('tags', e.target.value)} />
+                    </Field>
+                    <Field label="Reference">
+                      <TextField value={d.reference} placeholder="UPI / invoice ref" onChange={(e) => set('reference', e.target.value)} />
+                    </Field>
+                  </div>
+                  <Field label="Notes">
+                    <TextArea value={d.notes} placeholder="Anything else to remember" onChange={(e) => set('notes', e.target.value)} />
+                  </Field>
+                </div>
+              )}
             </div>
-            <Field label="Notes">
-              <TextArea value={d.notes} placeholder="Anything else to remember" onChange={(e) => set('notes', e.target.value)} />
-            </Field>
 
             {existing && (
               <div className="flex flex-wrap gap-2 border-t border-line pt-3">

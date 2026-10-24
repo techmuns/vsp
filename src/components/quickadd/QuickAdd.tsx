@@ -306,7 +306,7 @@ export function QuickAdd({ open, prefill, onClose, dataset }: { open: boolean; p
               <Field label="Category">
                 <CreatableSelect
                   value={d.categoryId}
-                  onChange={(v) => set('categoryId', v)}
+                  onChange={(v) => { const dp = dataset.categories.find((c) => c.id === v)?.defaultPurposeId; setD((p) => ({ ...p, categoryId: v, ...(dp ? { purposeId: dp } : {}) })); }}
                   options={categoryOpts}
                   placeholder="Pick a category"
                   createNoun="category"

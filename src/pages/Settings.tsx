@@ -22,10 +22,11 @@ import {
 } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import { useApp } from '../app/context';
-import type { AccountType, Category, CategoryKind, Goal, NotificationPrefs, Recurring, RecurringMode } from '../db/types';
+import type { AccountType, Category, CategoryKind, Goal, NotificationPrefs, Purpose, Recurring, RecurringMode } from '../db/types';
 import {
   clearDemoData,
   confirmRecurring,
+  ensurePurpose,
   exportBackup,
   inspectBackup,
   loadBackupFromFile,
@@ -318,7 +319,7 @@ function CategoryColumn({ dataset, kind, title, color }: { dataset: Dataset; kin
       ) : (
         <div className="space-y-2">
           {parents.map((c) => (
-            <CategoryRow key={c.id} cat={c} kind={kind} subs={subsOf(c.id)} />
+            <CategoryRow key={c.id} cat={c} kind={kind} subs={subsOf(c.id)} purposes={dataset.purposes} />
           ))}
         </div>
       )}
@@ -326,7 +327,7 @@ function CategoryColumn({ dataset, kind, title, color }: { dataset: Dataset; kin
   );
 }
 
-function CategoryRow({ cat, kind, subs }: { cat: Category; kind: CategoryKind; subs: Category[] }) {
+function CategoryRow({ cat, kind, subs, purposes }: { cat: Category; kind: CategoryKind; subs: Category[]; purposes: Purpose[] }) {
   const [sub, setSub] = useState('');
   const addSub = async () => {
     if (sub.trim()) {
@@ -334,15 +335,37 @@ function CategoryRow({ cat, kind, subs }: { cat: Category; kind: CategoryKind; s
       setSub('');
     }
   };
+  const defName = purposes.find((p) => p.id === cat.defaultPurposeId)?.name;
+  const tag = defName === 'Office' ? 'Office' : defName === 'Personal' ? 'Personal' : null;
+  const setTag = async (label: 'Office' | 'Personal' | null) => {
+    const pid = label ? await ensurePurpose(label) : undefined;
+    await saveCategory({ ...cat, defaultPurposeId: pid });
+    toast(label ? `Tagged ${label}` : 'Tag removed', { tone: 'success' });
+  };
   return (
     <div className="rounded-xl border border-line bg-white px-3 py-2.5">
       <div className="flex items-center gap-2">
         <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: cat.colorKey ?? colorForId(cat.id) }} />
         <span className={`text-[13px] font-semibold ${cat.active ? 'text-ink' : 'text-muted line-through'}`}>{cat.name}</span>
         {cat.demo && <Badge color={MONEY.invest}>demo</Badge>}
-        <button onClick={() => setActive('categories', cat.id, !cat.active)} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-grey hover:bg-black/5" title={cat.active ? 'Deactivate' : 'Reactivate'}>
-          <Power size={13} className={cat.active ? 'text-money-save' : 'text-muted'} />
-        </button>
+        <div className="ml-auto flex items-center gap-1">
+          {kind === 'expense' && (['Personal', 'Office'] as const).map((label) => {
+            const active = tag === label;
+            return (
+              <button
+                key={label}
+                onClick={() => setTag(active ? null : label)}
+                title={active ? `Remove ${label} tag` : `Auto-tag entries here as ${label}`}
+                className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition ${active ? 'border-brand bg-brand/10 text-brand' : 'border-line text-grey hover:border-brand/40'}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+          <button onClick={() => setActive('categories', cat.id, !cat.active)} className="grid h-7 w-7 place-items-center rounded-lg text-grey hover:bg-black/5" title={cat.active ? 'Deactivate' : 'Reactivate'}>
+            <Power size={13} className={cat.active ? 'text-money-save' : 'text-muted'} />
+          </button>
+        </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line/60 pl-5 pt-2">
         {subs.length === 0 && <span className="text-[11px] text-muted">No sub-categories yet</span>}
