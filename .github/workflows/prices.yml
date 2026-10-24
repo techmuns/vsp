@@ -1,8 +1,9 @@
 name: Refresh market prices
 
-# Fetches PUBLIC prices (AMFI NAVs + stock quotes) for public/data/watchlist.json
-# and commits public/data/market-prices.json. No personal data is involved, and
-# no secrets are needed for AMFI/Yahoo. Cloudflare Pages auto-deploys on push.
+# Fetches PUBLIC reference data (AMFI fund NAVs + NSE stock closes/names) and
+# commits public/data/{market-prices,fund-directory,stock-directory}.json. No
+# personal data is involved and no secrets are needed. Cloudflare Pages
+# auto-deploys on push.
 
 on:
   schedule:
@@ -34,10 +35,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet -- public/data/market-prices.json; then
-            git add public/data/market-prices.json
-            git commit -m "chore: refresh market prices"
+          FILES="public/data/market-prices.json public/data/fund-directory.json public/data/stock-directory.json"
+          if ! git diff --quiet -- $FILES; then
+            git add $FILES
+            git commit -m "chore: refresh market prices & instrument directory"
             git push
           else
-            echo "No price changes."
+            echo "No market-data changes."
           fi
