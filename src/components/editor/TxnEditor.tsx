@@ -302,7 +302,18 @@ export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg:
                   <CreatableSelect value={d.categoryId} onChange={(v) => set('categoryId', v)} options={categoryOpts} placeholder="Pick" createNoun="category" onCreate={async (name) => (await saveCategory({ name, kind: isIncomeKind ? 'income' : 'expense' })).id} />
                 </Field>
                 <Field label="Subcategory">
-                  <Dropdown value={d.subcategoryId} options={subcategoryOpts} onChange={(v) => set('subcategoryId', v)} placeholder={subcategoryOpts.length ? 'Optional' : 'None'} width="100%" />
+                  {d.categoryId ? (
+                    <CreatableSelect
+                      value={d.subcategoryId}
+                      onChange={(v) => set('subcategoryId', v)}
+                      options={subcategoryOpts}
+                      placeholder="Optional"
+                      createNoun="subcategory"
+                      onCreate={async (name) => (await saveCategory({ name, kind: isIncomeKind ? 'income' : 'expense', parentId: d.categoryId })).id}
+                    />
+                  ) : (
+                    <Dropdown value={d.subcategoryId} options={subcategoryOpts} onChange={(v) => set('subcategoryId', v)} placeholder="Pick a category first" width="100%" />
+                  )}
                 </Field>
               </div>
             )}

@@ -70,10 +70,15 @@ export function DateRangePicker({
               <span className="text-[11px] font-bold uppercase tracking-wide text-grey">Custom range</span>
               {preset === 'custom' && <Check size={14} className="text-brand" />}
             </div>
-            <div className="flex items-center gap-2">
-              <DateField value={draft.from} max={draft.to} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} />
-              <span className="text-grey">–</span>
-              <DateField value={draft.to} min={draft.from} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} />
+            <div className="space-y-2">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-grey">From</span>
+                <DateField value={draft.from} max={draft.to} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-grey">To</span>
+                <DateField value={draft.to} min={draft.from} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} />
+              </label>
             </div>
             <button
               onClick={() => {
