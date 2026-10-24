@@ -34,22 +34,31 @@ async function fetchText(url, opts = {}) {
   return res.text();
 }
 
-async function fetchMutualFunds(isins) {
-  if (!isins.length) return [];
-  const wanted = new Set(isins.map((x) => x.trim().toUpperCase()));
+// Publish EVERY AMFI scheme NAV, keyed by ISIN. The app matches a user's funds
+// locally by ISIN, so their holdings never need to be listed anywhere public —
+// any mutual fund with an ISIN gets a live daily NAV automatically.
+async function fetchAllMutualFunds() {
   const out = [];
+  const seen = new Set();
   try {
     const txt = await fetchText('https://www.amfiindia.com/spages/NAVAll.txt');
     for (const line of txt.split('\n')) {
       const f = line.split(';');
       if (f.length < 6) continue; // skip headers / section titles
-      const isinA = f[1]?.trim().toUpperCase();
-      const isinB = f[2]?.trim().toUpperCase();
-      const nav = f[4];
-      const date = f[5];
-      const hit = wanted.has(isinA) ? isinA : wanted.has(isinB) ? isinB : null;
-      if (!hit || !nav || isNaN(Number(nav))) continue;
-      out.push({ key: hit, pricePaise: toPaise(nav), asOf: amfiDate(date), source: 'amfi' });
+      // NAV and Date are always the last two columns (AMFI has added Plan/Option
+      // columns over time, so fixed indexes 4/5 are not safe).
+      const nav = f[f.length - 2];
+      if (!nav || isNaN(Number(nav)) || Number(nav) <= 0) continue;
+      const asOf = amfiDate(f[f.length - 1]);
+      const pricePaise = toPaise(nav);
+      // A scheme can carry two ISINs (payout + reinvestment); emit both.
+      for (const col of [f[1], f[2]]) {
+        const isin = (col || '').trim().toUpperCase();
+        if (/^INF[0-9A-Z]{9}$/.test(isin) && !seen.has(isin)) {
+          seen.add(isin);
+          out.push({ key: isin, pricePaise, asOf, source: 'amfi' });
+        }
+      }
     }
   } catch (e) {
     console.error('AMFI fetch failed:', e.message);
@@ -82,14 +91,16 @@ async function main() {
   } catch (e) {
     console.error('No watchlist — writing empty prices.', e.message);
   }
+  // Mutual funds: ALL AMFI NAVs (matched locally by ISIN — zero config, private).
+  // Stocks: still a small public watchlist of tickers (Yahoo needs per-symbol calls).
   const stocks = Array.isArray(watchlist.stocks) ? watchlist.stocks : [];
-  const mfs = Array.isArray(watchlist.mutualFunds) ? watchlist.mutualFunds : [];
 
-  const [mfPrices, stockPrices] = await Promise.all([fetchMutualFunds(mfs), fetchStocks(stocks)]);
+  const [mfPrices, stockPrices] = await Promise.all([fetchAllMutualFunds(), fetchStocks(stocks)]);
   const rows = [...stockPrices, ...mfPrices];
 
-  await writeFile(OUT, JSON.stringify(rows, null, 2) + '\n', 'utf8');
-  console.log(`Wrote ${rows.length} prices to public/data/market-prices.json`);
+  // Compact (no indent) — this file now holds the whole AMFI NAV set.
+  await writeFile(OUT, JSON.stringify(rows) + '\n', 'utf8');
+  console.log(`Wrote ${rows.length} prices (${mfPrices.length} MF + ${stockPrices.length} stock) to public/data/market-prices.json`);
 }
 
 main().catch((e) => {

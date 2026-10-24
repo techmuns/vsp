@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { TrendingUp, PieChart, Activity, Plus, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { TrendingUp, PieChart, Activity, Plus, RefreshCw, Wifi, WifiOff, Link2, Pencil } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
 import { latestPriceAsOf, getTxnType, INVESTMENT_TYPES } from '../engine';
@@ -8,12 +8,12 @@ import { isStalePrice, type MarketPricesState } from '../app/market';
 import type { DateRange } from '../lib/dates';
 import { MONEY, colorForId } from '../lib/brand';
 import { fmtINR, fmtCompact, fmtPct, fmtUnits, fmtDate } from '../lib/format';
-import { upsertPrice } from '../db/repo';
+import { upsertPrice, saveInvestment } from '../db/repo';
 import { toast } from '../app/toast';
 import { useApp } from '../app/context';
 import { Card, PageHeader, CardHeader, EmptyState, Badge, MiniStat } from '../components/ui/Card';
 import { SubTabs } from '../components/ui/Tabs';
-import { Button, AmountField, DateField } from '../components/ui/Controls';
+import { Button, AmountField, DateField, TextField } from '../components/ui/Controls';
 import { Donut, type DonutDatum } from '../components/charts/Donut';
 import { Columns } from '../components/charts/Columns';
 
@@ -214,26 +214,69 @@ function PriceRow({ inv, pricePaise, meta }: { inv: Dataset['investments'][numbe
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState<number | null>(pricePaise);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const isMF = inv.assetType === 'mutual_fund';
+  const idValue = inv.isin || inv.symbol || '';
+  const canLink = inv.assetType !== 'other';
+  const [linking, setLinking] = useState(false);
+  const [idInput, setIdInput] = useState(idValue);
+  const live = meta ? meta.source !== 'demo' && meta.source !== 'manual' : false;
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold text-ink">{inv.name}</div>
-        <div className="text-[11px] text-grey">{inv.platform}{inv.isin ? ` · ${inv.isin}` : inv.symbol ? ` · ${inv.symbol}` : ''}</div>
-      </div>
-      {!editing ? (
-        <>
-          <div className="text-right">
-            <div className="tnum font-semibold text-ink">{pricePaise != null ? fmtINR(pricePaise) : <span className="italic text-muted">—</span>}</div>
-            {meta && <div className="text-[10.5px] text-grey">{fmtDate(meta.date)} · {meta.source}{meta.stale ? ' · stale' : ''}</div>}
+    <div className="px-3 py-2.5">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-ink">{inv.name}</div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-grey">
+            <span>{inv.platform}</span>
+            {idValue ? (
+              <button onClick={() => { setIdInput(idValue); setLinking((v) => !v); }} className="inline-flex items-center gap-1 rounded bg-canvas px-1.5 py-0.5 font-medium text-slate hover:text-ink" title="Edit the ISIN / ticker used for live prices">
+                {idValue}
+                {live && <Wifi size={10} className="text-money-save" />}
+                <Pencil size={10} />
+              </button>
+            ) : canLink ? (
+              <button onClick={() => { setIdInput(''); setLinking(true); }} className="inline-flex items-center gap-1 rounded bg-money-save/12 px-1.5 py-0.5 font-semibold text-money-save hover:bg-money-save/20">
+                <Link2 size={10} /> Link for live {isMF ? 'NAV' : 'price'}
+              </button>
+            ) : null}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { setPrice(pricePaise); setEditing(true); }}>Update</Button>
-        </>
-      ) : (
-        <div className="flex items-center gap-1.5">
-          <div className="w-28"><AmountField paise={price} onPaise={setPrice} placeholder="per unit" /></div>
-          <div className="w-36"><DateField value={date} onChange={(e) => setDate(e.target.value)} /></div>
-          <Button size="sm" disabled={!price} onClick={async () => { if (price) { await upsertPrice({ investmentId: inv.id, date, pricePaise: price, source: 'manual', asOf: date }); toast('Price updated', { tone: 'success' }); setEditing(false); } }}>Save</Button>
-          <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>×</Button>
+        </div>
+        {!editing ? (
+          <>
+            <div className="text-right">
+              <div className="tnum font-semibold text-ink">{pricePaise != null ? fmtINR(pricePaise) : <span className="italic text-muted">—</span>}</div>
+              {meta && <div className="text-[10.5px] text-grey">{fmtDate(meta.date)} · {meta.source}{meta.stale ? ' · stale' : ''}</div>}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setPrice(pricePaise); setEditing(true); }}>Update</Button>
+          </>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <div className="w-28"><AmountField paise={price} onPaise={setPrice} placeholder="per unit" /></div>
+            <div className="w-36"><DateField value={date} onChange={(e) => setDate(e.target.value)} /></div>
+            <Button size="sm" disabled={!price} onClick={async () => { if (price) { await upsertPrice({ investmentId: inv.id, date, pricePaise: price, source: 'manual', asOf: date }); toast('Price updated', { tone: 'success' }); setEditing(false); } }}>Save</Button>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>×</Button>
+          </div>
+        )}
+      </div>
+      {linking && (
+        <div className="mt-2 space-y-1">
+          <div className="flex items-center gap-1.5">
+            <div className="flex-1"><TextField autoFocus value={idInput} placeholder={isMF ? 'ISIN for daily NAV — e.g. INF…' : 'Yahoo ticker — e.g. RELIANCE.NS'} onChange={(e) => setIdInput(e.target.value)} /></div>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const v = idInput.trim().toUpperCase();
+                await saveInvestment({ ...inv, isin: isMF ? v || undefined : inv.isin, symbol: isMF ? inv.symbol : v || undefined });
+                toast(v ? 'Linked — live price updates daily' : 'Live link cleared', { tone: 'success' });
+                setLinking(false);
+              }}
+            >
+              Save
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setLinking(false)}>×</Button>
+          </div>
+          <p className="px-0.5 text-[10.5px] leading-snug text-muted">
+            {isMF ? 'The ISIN is on your statement / the AMC site — the daily NAV then updates on its own. Leave blank to clear and price by hand.' : 'Add .NS for NSE or .BO for BSE. Leave blank to clear and price by hand.'}
+          </p>
         </div>
       )}
     </div>
