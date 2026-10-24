@@ -16,6 +16,7 @@ import { TxnEditor } from './components/editor/TxnEditor';
 import { StatementImport } from './components/import/StatementImport';
 import { AiCategorize } from './components/ai/AiCategorize';
 import { ToastHost } from './app/toast';
+import { ConfirmHost } from './app/confirm';
 import { Onboarding } from './components/Onboarding';
 import Overview from './pages/Overview';
 import Settings from './pages/Settings';
@@ -135,6 +136,7 @@ export default function App() {
         <AiCategorize open={aiOpen} dataset={dataset} onClose={() => setAiOpen(false)} />
         {onboard && <Onboarding onClose={() => setOnboard(false)} />}
         <ToastHost />
+        <ConfirmHost />
       </div>
     </AppContext.Provider>
   );

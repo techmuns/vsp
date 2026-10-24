@@ -11,6 +11,7 @@ import { MONEY } from '../lib/brand';
 import { fmtINR, fmtCompact, fmtAxis, fmtPct, fmtDate, fmtMonth } from '../lib/format';
 import { saveBudget, removeEntity } from '../db/repo';
 import { toast } from '../app/toast';
+import { askConfirm } from '../app/confirm';
 import { Card, PageHeader, CardHeader, EmptyState } from '../components/ui/Card';
 import { SubTabs } from '../components/ui/Tabs';
 import { Button, AmountField, Dropdown, Field, type Option } from '../components/ui/Controls';
@@ -237,7 +238,7 @@ function Budgets({ dataset, snapshot, eInput, range, look }: { dataset: Dataset;
                   <div className="font-semibold text-ink">{label(b)} <span className="text-[11px] font-normal text-grey">· {b.period}</span></div>
                   <div className="flex items-center gap-2">
                     <span className="tnum text-[12.5px] font-bold" style={{ color }}>{fmtINR(actual)} <span className="font-normal text-grey">/ {fmtINR(b.amountPaise)}</span></span>
-                    <button onClick={async () => { if (confirm('Delete this budget?')) { await removeEntity('budgets', b.id); toast('Budget deleted', { tone: 'error' }); } }} className="text-muted hover:text-money-out"><Trash2 size={13} /></button>
+                    <button onClick={async () => { if (await askConfirm({ title: 'Delete this budget?', danger: true, confirmLabel: 'Delete' })) { await removeEntity('budgets', b.id); toast('Budget deleted', { tone: 'error' }); } }} className="text-muted hover:text-money-out"><Trash2 size={13} /></button>
                   </div>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-canvas">
