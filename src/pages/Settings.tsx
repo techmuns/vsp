@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import { useApp } from '../app/context';
-import type { AccountType, CategoryKind, Goal, NotificationPrefs, Recurring, RecurringMode } from '../db/types';
+import type { AccountType, Category, CategoryKind, Goal, NotificationPrefs, Recurring, RecurringMode } from '../db/types';
 import {
   clearDemoData,
   confirmRecurring,
@@ -283,11 +283,12 @@ function Categories({ dataset }: { dataset: Dataset }) {
 
 function CategoryColumn({ dataset, kind, title, color }: { dataset: Dataset; kind: CategoryKind; title: string; color: string }) {
   const [name, setName] = useState('');
-  const cats = dataset.categories.filter((c) => c.kind === kind && !c.parentId).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
+  const parents = dataset.categories.filter((c) => c.kind === kind && !c.parentId).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
+  const subsOf = (pid: string) => dataset.categories.filter((c) => c.parentId === pid).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
 
   return (
     <Card>
-      <CardHeader icon={Tag} title={title} accent={color} />
+      <CardHeader icon={Tag} title={title} subtitle="Add a category, then add sub-categories under it." accent={color} />
       <div className="mb-3 flex gap-2">
         <TextField
           value={name}
@@ -312,26 +313,61 @@ function CategoryColumn({ dataset, kind, title, color }: { dataset: Dataset; kin
           Add
         </Button>
       </div>
-      {cats.length === 0 ? (
+      {parents.length === 0 ? (
         <EmptyState icon={Tag} title="None yet" hint="Add categories as you need them, or load demo data." compact />
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {cats.map((c) => (
-            <span
-              key={c.id}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold ${c.active ? 'border-line bg-white text-slate' : 'border-line bg-canvas text-muted line-through'}`}
-            >
-              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: c.colorKey ?? colorForId(c.id) }} />
-              {c.name}
-              {c.demo && <span className="text-[9px] uppercase text-money-invest">demo</span>}
-              <button onClick={() => setActive('categories', c.id, !c.active)} className="text-muted hover:text-money-out" title={c.active ? 'Deactivate' : 'Reactivate'}>
-                <Power size={12} />
-              </button>
-            </span>
+        <div className="space-y-2">
+          {parents.map((c) => (
+            <CategoryRow key={c.id} cat={c} kind={kind} subs={subsOf(c.id)} />
           ))}
         </div>
       )}
     </Card>
+  );
+}
+
+function CategoryRow({ cat, kind, subs }: { cat: Category; kind: CategoryKind; subs: Category[] }) {
+  const [sub, setSub] = useState('');
+  const addSub = async () => {
+    if (sub.trim()) {
+      await saveCategory({ name: sub.trim(), kind, parentId: cat.id });
+      setSub('');
+    }
+  };
+  return (
+    <div className="rounded-xl border border-line bg-white px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: cat.colorKey ?? colorForId(cat.id) }} />
+        <span className={`text-[13px] font-semibold ${cat.active ? 'text-ink' : 'text-muted line-through'}`}>{cat.name}</span>
+        {cat.demo && <Badge color={MONEY.invest}>demo</Badge>}
+        <button onClick={() => setActive('categories', cat.id, !cat.active)} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-grey hover:bg-black/5" title={cat.active ? 'Deactivate' : 'Reactivate'}>
+          <Power size={13} className={cat.active ? 'text-money-save' : 'text-muted'} />
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-line/60 pl-5 pt-2">
+        {subs.length === 0 && <span className="text-[11px] text-muted">No sub-categories yet</span>}
+        {subs.map((s) => (
+          <span key={s.id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11.5px] font-medium ${s.active ? 'border-line bg-canvas text-slate' : 'border-line text-muted line-through'}`}>
+            {s.name}
+            <button onClick={() => setActive('categories', s.id, !s.active)} className="text-muted hover:text-money-out" title={s.active ? 'Deactivate' : 'Reactivate'}>
+              <Power size={10} />
+            </button>
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1">
+          <input
+            value={sub}
+            placeholder="+ sub-category"
+            onChange={(e) => setSub(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addSub()}
+            className="w-32 rounded-full border border-dashed border-line bg-white px-2.5 py-0.5 text-[11.5px] text-ink outline-none transition focus:border-brand/50"
+          />
+          {sub.trim() && (
+            <button onClick={addSub} className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-bold text-white">Add</button>
+          )}
+        </span>
+      </div>
+    </div>
   );
 }
 
