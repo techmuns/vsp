@@ -16,6 +16,7 @@ import { SubTabs } from '../components/ui/Tabs';
 import { Button, AmountField, DateField, TextField } from '../components/ui/Controls';
 import { Donut, type DonutDatum } from '../components/charts/Donut';
 import { Columns } from '../components/charts/Columns';
+import { InstrumentSearch } from '../components/quickadd/InstrumentSearch';
 
 type Tab = 'holdings' | 'allocation' | 'activity' | 'prices';
 
@@ -218,8 +219,17 @@ function PriceRow({ inv, pricePaise, meta }: { inv: Dataset['investments'][numbe
   const idValue = inv.isin || inv.symbol || '';
   const canLink = inv.assetType !== 'other';
   const [linking, setLinking] = useState(false);
+  const [manualLink, setManualLink] = useState(false);
   const [idInput, setIdInput] = useState(idValue);
   const live = meta ? meta.source !== 'demo' && meta.source !== 'manual' : false;
+
+  const applyIdentifier = async (code: string) => {
+    const v = code.trim().toUpperCase();
+    await saveInvestment({ ...inv, isin: isMF ? v || undefined : inv.isin, symbol: isMF ? inv.symbol : v || undefined });
+    toast(v ? 'Linked — live price updates daily' : 'Live link cleared', { tone: 'success' });
+    setLinking(false);
+    setManualLink(false);
+  };
   return (
     <div className="px-3 py-2.5">
       <div className="flex items-center gap-3">
@@ -258,25 +268,31 @@ function PriceRow({ inv, pricePaise, meta }: { inv: Dataset['investments'][numbe
         )}
       </div>
       {linking && (
-        <div className="mt-2 space-y-1">
-          <div className="flex items-center gap-1.5">
-            <div className="flex-1"><TextField autoFocus value={idInput} placeholder={isMF ? 'ISIN for daily NAV — e.g. INF…' : 'Yahoo ticker — e.g. RELIANCE.NS'} onChange={(e) => setIdInput(e.target.value)} /></div>
-            <Button
-              size="sm"
-              onClick={async () => {
-                const v = idInput.trim().toUpperCase();
-                await saveInvestment({ ...inv, isin: isMF ? v || undefined : inv.isin, symbol: isMF ? inv.symbol : v || undefined });
-                toast(v ? 'Linked — live price updates daily' : 'Live link cleared', { tone: 'success' });
-                setLinking(false);
-              }}
-            >
-              Save
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setLinking(false)}>×</Button>
-          </div>
-          <p className="px-0.5 text-[10.5px] leading-snug text-muted">
-            {isMF ? 'The ISIN is on your statement / the AMC site — the daily NAV then updates on its own. Leave blank to clear and price by hand.' : 'Add .NS for NSE or .BO for BSE. Leave blank to clear and price by hand.'}
-          </p>
+        <div className="mt-2 space-y-1.5 rounded-xl bg-canvas/60 p-2">
+          {!manualLink ? (
+            <>
+              <InstrumentSearch kind={isMF ? 'fund' : 'stock'} onPick={(h) => applyIdentifier(h.id)} autoFocus />
+              <div className="flex items-center justify-between px-0.5">
+                <button type="button" onClick={() => { setIdInput(idValue); setManualLink(true); }} className="text-[11px] font-medium text-brand hover:underline">
+                  Type the code manually
+                </button>
+                <button type="button" onClick={() => setLinking(false)} className="text-[11px] font-medium text-grey hover:text-ink">
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5">
+                <div className="flex-1"><TextField autoFocus value={idInput} placeholder={isMF ? 'ISIN — e.g. INF…' : 'Ticker — e.g. RELIANCE.NS'} onChange={(e) => setIdInput(e.target.value)} /></div>
+                <Button size="sm" onClick={() => applyIdentifier(idInput)}>Save</Button>
+                <Button variant="ghost" size="sm" onClick={() => setLinking(false)}>×</Button>
+              </div>
+              <button type="button" onClick={() => setManualLink(false)} className="px-0.5 text-[11px] font-medium text-brand hover:underline">
+                ← Search by name instead
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
