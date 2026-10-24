@@ -4,8 +4,9 @@ import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
 import { buildClaimableLines, claimBatchTotal } from '../engine';
 import type { ClaimStatus, ReimbursementClaim } from '../db/types';
-import { resolveRange, type DateRange } from '../lib/dates';
+import { resolveRange, startOfWeek, addDays, type DateRange } from '../lib/dates';
 import { todayISO } from '../db/ids';
+import { copyText } from '../lib/clipboard';
 import { addTransaction, deleteClaim, removeEntity, saveClaim, savePolicy, setActive, updateClaim } from '../db/repo';
 import { buildLookups } from '../app/lookups';
 import { MONEY } from '../lib/brand';
@@ -172,20 +173,43 @@ function Claimable({ dataset }: { dataset: Dataset }) {
   async function createClaim() {
     if (includedIds.length === 0 || total <= 0) return;
     await saveClaim({ periodStart: period.from, periodEnd: period.to, txnIds: includedIds, amountPaise: total, status: 'draft' });
-    toast('Claim batch created', { tone: 'success', actionLabel: 'View', onAction: () => {} });
+    toast('Saved — find it under the Claims tab', { tone: 'success' });
+    setExcluded(new Set());
+    setOverrides({});
+  }
+
+  async function copyForHr() {
+    if (includedIds.length === 0 || total <= 0) return;
+    // Save it (marked submitted, since you're sending it now) and hand you the text.
+    await saveClaim({ periodStart: period.from, periodEnd: period.to, txnIds: includedIds, amountPaise: total, status: 'submitted', submittedAt: Date.now() });
+    const incl = lines.filter((l) => !excluded.has(l.txnId));
+    const text =
+      `Reimbursement claim — ${fmtDate(period.from)} to ${fmtDate(period.to)}\nTotal: ${fmtINR(total)}\n\n` +
+      incl.map((l) => `• ${fmtDate(l.date)}  ${l.description || look.catName(l.categoryId)}  ${fmtINR(overrides[l.txnId] ?? l.claimablePaise)}`).join('\n');
+    const ok = await copyText(text);
+    if (ok) {
+      toast('Copied! Paste it into your email or WhatsApp to HR.', { tone: 'success' });
+    } else {
+      const a = document.createElement('a');
+      a.href = `mailto:?subject=${encodeURIComponent('Reimbursement claim')}&body=${encodeURIComponent(text)}`;
+      a.click();
+      toast('Opening your email with the claim ready to send…', { tone: 'success' });
+    }
     setExcluded(new Set());
     setOverrides({});
   }
 
   return (
     <Card>
-      <CardHeader icon={Receipt} title="Claimable this period" subtitle="Eligible reimbursable expenses, with the policy-calculated amount. Adjust before claiming." accent={MONEY.reimb} />
+      <CardHeader icon={Receipt} title="Claim from HR" subtitle="Pick the week, tick what to claim, then one tap — Copy for HR." accent={MONEY.reimb} />
       <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Button variant="soft" size="sm" onClick={() => setPeriod(resolveRange('this_week', { today: todayISO() }))}>This week</Button>
+        <Button variant="soft" size="sm" onClick={() => { const mon = startOfWeek(todayISO()); setPeriod({ from: addDays(mon, -7), to: addDays(mon, -1) }); }}>Last week</Button>
+        <Button variant="outline" size="sm" onClick={() => setPeriod(cycle)}>Salary cycle</Button>
+        <span className="mx-1 hidden text-line sm:inline">|</span>
         <DateField value={period.from} max={period.to} onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))} />
         <span className="text-grey">–</span>
         <DateField value={period.to} min={period.from} onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))} />
-        <Button variant="outline" size="sm" onClick={() => setPeriod(cycle)}>Salary cycle</Button>
-        <Button variant="outline" size="sm" onClick={() => setPeriod(resolveRange('this_month', { today: todayISO() }))}>This month</Button>
       </div>
 
       {lines.length === 0 ? (
@@ -212,7 +236,10 @@ function Claimable({ dataset }: { dataset: Dataset }) {
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <div className="text-[13px] text-grey">Claiming <b className="tnum text-ink">{includedIds.length}</b> of {lines.length} · total <b className="tnum text-money-reimb">{fmtINR(total)}</b></div>
-            <Button icon={Plus} disabled={includedIds.length === 0 || total <= 0} onClick={createClaim}>Build claim batch</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" icon={Plus} disabled={includedIds.length === 0 || total <= 0} onClick={createClaim}>Just save</Button>
+              <Button icon={Copy} disabled={includedIds.length === 0 || total <= 0} onClick={copyForHr}>Copy for HR</Button>
+            </div>
           </div>
         </>
       )}
@@ -236,11 +263,11 @@ function Claims({ dataset }: { dataset: Dataset }) {
   const claims = [...dataset.claims].sort((a, b) => b.createdAt - a.createdAt);
   const [receiptFor, setReceiptFor] = useState<ReimbursementClaim | null>(null);
 
-  function copySummary(c: ReimbursementClaim) {
+  async function copySummary(c: ReimbursementClaim) {
     const lines = c.txnIds.map((id) => dataset.transactions.find((t) => t.id === id)).filter(Boolean);
     const text = `Reimbursement claim — ${fmtDate(c.periodStart)} to ${fmtDate(c.periodEnd)}\nTotal: ${fmtINR(c.amountPaise)}\n\n${lines.map((t) => `• ${fmtDate(t!.date)}  ${t!.description || look.catName(t!.categoryId)}  ${fmtINR(t!.amountPaise)}`).join('\n')}`;
-    navigator.clipboard?.writeText(text);
-    toast('Summary copied', { tone: 'success' });
+    const ok = await copyText(text);
+    toast(ok ? 'Summary copied — paste it to HR' : 'Could not copy — try Export or Print instead', { tone: ok ? 'success' : 'error' });
   }
   function exportClaim(c: ReimbursementClaim) {
     const rows: Row[] = c.txnIds.map((id) => { const t = dataset.transactions.find((x) => x.id === id); return { Date: t?.date ?? '', Expense: t?.description ?? '', Category: t ? look.catName(t.categoryId) : '', 'Amount (₹)': (t?.amountPaise ?? 0) / 100 }; });
