@@ -79,17 +79,18 @@ export function MobileNav({ page, onNavigate }: { page: Page; onNavigate: (p: Pa
   );
 }
 
-export function TopBar({ onQuickAdd, notifications, children }: { onQuickAdd: () => void; notifications?: React.ReactNode; children?: React.ReactNode }) {
+export function TopBar({ onQuickAdd, notifications, leftExtra, children }: { onQuickAdd: () => void; notifications?: React.ReactNode; leftExtra?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-white/85 backdrop-blur-md">
       <div className="flex h-[57px] items-center justify-between gap-3 px-4 sm:px-6">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <div className="md:hidden">
             <BrandMark compact />
           </div>
-          <span className="hidden items-center gap-1.5 rounded-full bg-money-save/10 px-2.5 py-1 text-[11px] font-semibold text-money-save md:inline-flex">
+          <span className="hidden items-center gap-1.5 rounded-full bg-money-save/10 px-2.5 py-1 text-[11px] font-semibold text-money-save lg:inline-flex">
             <Lock size={12} /> Private · on this device
           </span>
+          {leftExtra}
         </div>
         <div className="flex items-center gap-2">
           {children}
