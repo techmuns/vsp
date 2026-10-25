@@ -42,15 +42,15 @@ export function InstrumentSearch({ kind, onPick, autoFocus }: { kind: 'fund' | '
               key={h.id}
               type="button"
               onClick={() => onPick(h)}
-              className="flex w-full items-center gap-2 border-b border-line/70 px-3 py-2 text-left last:border-0 hover:bg-canvas focus-ring"
+              className="flex w-full items-start gap-2 border-b border-line/70 px-3 py-2 text-left last:border-0 hover:bg-canvas focus-ring"
             >
-              <TrendingUp size={13} className="shrink-0 text-money-invest" />
+              <TrendingUp size={13} className="mt-0.5 shrink-0 text-money-invest" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-medium text-ink">{h.name}</div>
+                <div className="text-[12.5px] font-medium leading-snug text-ink">{h.name}</div>
                 <div className="text-[10.5px] text-grey">{h.kind === 'fund' ? h.id : `${h.id.replace('.NS', '')} · NSE`}</div>
               </div>
               {h.pricePaise != null && (
-                <div className="shrink-0 text-right">
+                <div className="mt-0.5 shrink-0 text-right">
                   <div className="tnum text-[11.5px] font-semibold text-ink">{fmtINR(h.pricePaise)}</div>
                   <div className="text-[9.5px] uppercase tracking-wide text-grey">{h.kind === 'fund' ? 'NAV' : 'price'}</div>
                 </div>
