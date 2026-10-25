@@ -125,13 +125,17 @@ async function fetchNseStockPrices() {
       const txt = await fetchText(url, { headers: { accept: 'text/csv,*/*', referer: 'https://www.nseindia.com/' } });
       const lines = txt.split('\n');
       const asOf = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+      // Mainboard equity series: EQ (rolling) + BE/BZ (trade-to-trade / surveillance).
+      // A stock under surveillance (e.g. 3i Infotech) sits in BE, not EQ, but is
+      // still a normal holding — excluding those series left them with no price.
+      const EQUITY_SERIES = new Set(['EQ', 'BE', 'BZ']);
       for (let i = 1; i < lines.length; i++) {
         const c = lines[i].split(',').map((x) => x.trim());
         if (c.length < 9) continue;
         const symbol = c[0].toUpperCase();
         const series = c[1];
         const close = Number(c[8]); // CLOSE_PRICE
-        if (series !== 'EQ') continue; // the main equity series
+        if (!EQUITY_SERIES.has(series)) continue;
         if (!/^[A-Z0-9&-]+$/.test(symbol) || !isFinite(close) || close <= 0) continue;
         const key = `${symbol}.NS`;
         if (seen.has(key)) continue;

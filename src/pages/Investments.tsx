@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { TrendingUp, PieChart, Activity, Plus, RefreshCw, Wifi, WifiOff, Link2, Pencil } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
@@ -78,9 +78,27 @@ function priceMeta(prices: Price[], invId: string, asOf: string) {
   return p ? { source: p.source, date: p.date, stale: isStalePrice(p.date, asOf) } : null;
 }
 
+type AssetClass = 'Mutual funds' | 'Stocks' | 'Other';
+const CLASS_ORDER: AssetClass[] = ['Mutual funds', 'Stocks', 'Other'];
+const CLASS_COLOR: Record<AssetClass, string> = { 'Mutual funds': MONEY.invest, Stocks: MONEY.net, Other: MONEY.transfer };
+
+/** Infer the class from the identifier first (robust even if assetType wasn't set). */
+function assetClassOf(inv?: Dataset['investments'][number]): AssetClass {
+  if (!inv) return 'Other';
+  if (inv.isin) return 'Mutual funds';
+  if (inv.symbol || inv.assetType === 'stock' || inv.assetType === 'etf') return 'Stocks';
+  if (inv.assetType === 'mutual_fund') return 'Mutual funds';
+  return 'Other';
+}
+
 function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invById: InvMap; asOf: string }) {
   const rows = Object.values(pf.byInvestment).filter((p) => p.units > 0 || p.costPaise > 0).sort((a, b) => b.valuePaise - a.valuePaise);
   if (rows.length === 0) return <Card><EmptyState icon={TrendingUp} title="No open holdings" hint="Buys will show here with cost and value." compact /></Card>;
+  const groups = CLASS_ORDER.map((cls) => {
+    const gr = rows.filter((p) => assetClassOf(invById.get(p.investmentId)) === cls);
+    return { cls, rows: gr, value: gr.reduce((s, p) => s + p.valuePaise, 0) };
+  }).filter((g) => g.rows.length > 0);
+  const grouped = groups.length > 1;
   return (
     <Card pad={false}>
       <div className="nice-scroll overflow-x-auto">
@@ -89,33 +107,46 @@ function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invB
             <th className="px-3 py-2 text-left">Holding</th><th className="px-3 py-2 text-right">Units</th><th className="px-3 py-2 text-right">Avg cost</th><th className="px-3 py-2 text-right">Invested</th><th className="px-3 py-2 text-right">Value</th><th className="px-3 py-2 text-right">P/L</th><th className="px-3 py-2 text-left">Price</th>
           </tr></thead>
           <tbody>
-            {rows.map((p) => {
-              const inv = invById.get(p.investmentId);
-              const avg = p.units > 0 ? p.costPaise / p.units : 0;
-              const meta = priceMeta(prices, p.investmentId, asOf);
-              const plPct = p.costPaise > 0 && p.unrealizedPaise != null ? (p.unrealizedPaise / p.costPaise) * 100 : null;
-              return (
-                <tr key={p.investmentId} className="border-b border-line/70 last:border-0">
-                  <td className="px-3 py-2"><div className="font-semibold text-ink">{inv?.name ?? '—'}</div><div className="text-[11px] text-grey">{inv?.platform}{inv?.symbol ? ` · ${inv.symbol}` : ''}</div></td>
-                  <td className="tnum px-3 py-2 text-right text-slate">{fmtUnits(p.units)}</td>
-                  <td className="tnum px-3 py-2 text-right text-grey">{avg > 0 ? fmtINR(Math.round(avg)) : '—'}</td>
-                  <td className="tnum px-3 py-2 text-right text-slate">{fmtINR(p.costPaise)}</td>
-                  <td className="tnum px-3 py-2 text-right font-semibold text-ink">{fmtINR(p.valuePaise)}</td>
-                  <td className="tnum px-3 py-2 text-right font-bold" style={{ color: !p.hasPrice ? MONEY.transfer : (p.unrealizedPaise ?? 0) >= 0 ? MONEY.in : MONEY.out }}>
-                    {!p.hasPrice ? '—' : <>{fmtINR(p.unrealizedPaise!)}{plPct != null && <span className="ml-1 text-[10.5px] font-semibold">{plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%</span>}</>}
-                  </td>
-                  <td className="px-3 py-2">
-                    {meta ? (
-                      <span className="inline-flex items-center gap-1 text-[11px]">
-                        <span className="text-grey">{fmtDate(meta.date)}</span>
-                        <Badge color={meta.source === 'demo' || meta.source === 'manual' ? MONEY.transfer : MONEY.reimb}>{meta.source}</Badge>
-                        {meta.stale && <Badge color={MONEY.out}>stale</Badge>}
-                      </span>
-                    ) : <span className="text-[11px] italic text-muted">price as of —</span>}
-                  </td>
-                </tr>
-              );
-            })}
+            {groups.map((g) => (
+              <Fragment key={g.cls}>
+                {grouped && (
+                  <tr className="bg-canvas/70">
+                    <td colSpan={4} className="px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: CLASS_COLOR[g.cls] }}>
+                      <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: CLASS_COLOR[g.cls] }} />{g.cls} · {g.rows.length}</span>
+                    </td>
+                    <td className="tnum px-3 py-1.5 text-right text-[11px] font-bold text-ink">{fmtINR(g.value)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                )}
+                {g.rows.map((p) => {
+                  const inv = invById.get(p.investmentId);
+                  const avg = p.units > 0 ? p.costPaise / p.units : 0;
+                  const meta = priceMeta(prices, p.investmentId, asOf);
+                  const plPct = p.costPaise > 0 && p.unrealizedPaise != null ? (p.unrealizedPaise / p.costPaise) * 100 : null;
+                  return (
+                    <tr key={p.investmentId} className="border-b border-line/70 last:border-0">
+                      <td className="px-3 py-2"><div className="font-semibold text-ink">{inv?.name ?? '—'}</div><div className="text-[11px] text-grey">{inv?.platform}{inv?.symbol ? ` · ${inv.symbol}` : ''}</div></td>
+                      <td className="tnum px-3 py-2 text-right text-slate">{fmtUnits(p.units)}</td>
+                      <td className="tnum px-3 py-2 text-right text-grey">{avg > 0 ? fmtINR(Math.round(avg)) : '—'}</td>
+                      <td className="tnum px-3 py-2 text-right text-slate">{fmtINR(p.costPaise)}</td>
+                      <td className="tnum px-3 py-2 text-right font-semibold text-ink">{fmtINR(p.valuePaise)}</td>
+                      <td className="tnum px-3 py-2 text-right font-bold" style={{ color: !p.hasPrice ? MONEY.transfer : (p.unrealizedPaise ?? 0) >= 0 ? MONEY.in : MONEY.out }}>
+                        {!p.hasPrice ? '—' : <>{fmtINR(p.unrealizedPaise!)}{plPct != null && <span className="ml-1 text-[10.5px] font-semibold">{plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%</span>}</>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {meta ? (
+                          <span className="inline-flex items-center gap-1 text-[11px]">
+                            <span className="text-grey">{fmtDate(meta.date)}</span>
+                            <Badge color={meta.source === 'demo' || meta.source === 'manual' ? MONEY.transfer : MONEY.reimb}>{meta.source}</Badge>
+                            {meta.stale && <Badge color={MONEY.out}>stale</Badge>}
+                          </span>
+                        ) : <span className="text-[11px] italic text-muted">price as of —</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
             {pf.totalRealizedPaise !== 0 && (
               <tr className="bg-canvas/50"><td colSpan={7} className="px-3 py-2 text-[11.5px] text-grey">Realised P/L to date: <b className="tnum" style={{ color: pf.totalRealizedPaise >= 0 ? MONEY.in : MONEY.out }}>{fmtINR(pf.totalRealizedPaise)}</b></td></tr>
             )}
