@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Search, Loader2, TrendingUp } from 'lucide-react';
 import { useInstrumentDirectory, searchInstruments, type InstrumentHit } from '../../app/directory';
+import { fmtINR } from '../../lib/format';
 
 /**
  * Type-ahead search over the public fund / stock directory. The user types the
@@ -48,6 +49,12 @@ export function InstrumentSearch({ kind, onPick, autoFocus }: { kind: 'fund' | '
                 <div className="truncate text-[12.5px] font-medium text-ink">{h.name}</div>
                 <div className="text-[10.5px] text-grey">{h.kind === 'fund' ? h.id : `${h.id.replace('.NS', '')} · NSE`}</div>
               </div>
+              {h.pricePaise != null && (
+                <div className="shrink-0 text-right">
+                  <div className="tnum text-[11.5px] font-semibold text-ink">{fmtINR(h.pricePaise)}</div>
+                  <div className="text-[9.5px] uppercase tracking-wide text-grey">{h.kind === 'fund' ? 'NAV' : 'price'}</div>
+                </div>
+              )}
             </button>
           ))}
         </div>
