@@ -13,11 +13,13 @@ export interface InstrumentHit {
   kind: 'fund' | 'stock';
   id: string; // ISIN for a fund, SYMBOL.NS for a stock
   name: string;
+  pricePaise?: number; // latest NAV / price, when the feed has it — shown to disambiguate
 }
 
 interface Directory {
   funds: { i: string; n: string }[];
   stocks: { s: string; n: string }[];
+  priceByKey: Map<string, number>; // ISIN / SYMBOL.NS -> latest pricePaise
 }
 
 let cache: Directory | null = null;
@@ -38,12 +40,18 @@ function loadDirectory(): Promise<Directory> {
   if (cache) return Promise.resolve(cache);
   if (inflight) return inflight;
   const base = import.meta.env.BASE_URL;
-  inflight = Promise.all([fetchJson(`${base}data/fund-directory.json`), fetchJson(`${base}data/stock-directory.json`)]).then(
-    ([funds, stocks]) => {
-      cache = { funds: funds as Directory['funds'], stocks: stocks as Directory['stocks'] };
-      return cache;
+  inflight = Promise.all([
+    fetchJson(`${base}data/fund-directory.json`),
+    fetchJson(`${base}data/stock-directory.json`),
+    fetchJson(`${base}data/market-prices.json`), // already cached — adds live NAV/price to results
+  ]).then(([funds, stocks, prices]) => {
+    const priceByKey = new Map<string, number>();
+    for (const r of prices as { key?: string; pricePaise?: number }[]) {
+      if (r && typeof r.key === 'string' && typeof r.pricePaise === 'number') priceByKey.set(r.key, r.pricePaise);
     }
-  );
+    cache = { funds: funds as Directory['funds'], stocks: stocks as Directory['stocks'], priceByKey };
+    return cache;
+  });
   return inflight;
 }
 
@@ -96,7 +104,7 @@ export function searchInstruments(dir: Directory | null, kind: 'fund' | 'stock',
     }
     if (!ok) continue;
     const score = lname.startsWith(q) ? 3 : lname.includes(` ${q}`) ? 2 : 1;
-    hits.push({ h: { kind, id, name }, score });
+    hits.push({ h: { kind, id, name, pricePaise: dir.priceByKey.get(id) }, score });
   }
   hits.sort((a, b) => b.score - a.score || a.h.name.length - b.h.name.length);
   return hits.slice(0, limit).map((x) => x.h);
