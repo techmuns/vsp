@@ -31,7 +31,8 @@ export default function Reimbursements({ dataset, snapshot }: { dataset: Dataset
         accent={MONEY.reimb}
         right={
           <div className="hidden gap-3 sm:flex">
-            <Mini label="Claimable (period)" value={fmtINR(snapshot.reimb.claimablePaise)} color={MONEY.reimb} />
+            <Mini label="Office spend" value={fmtINR(snapshot.reimb.eligibleGrossPaise)} color={MONEY.out} />
+            <Mini label="Reimbursable" value={fmtINR(snapshot.reimb.claimablePaise)} color={MONEY.reimb} />
             <Mini label="Pending" value={fmtINR(snapshot.reimb.outstandingPaise)} color={MONEY.receivable} />
           </div>
         }
@@ -59,6 +60,16 @@ function Mini({ label, value, color }: { label: string; value: string; color: st
     <div className="text-right">
       <div className="text-[10px] font-semibold uppercase tracking-wide text-grey">{label}</div>
       <div className="tnum font-display text-[15px] font-extrabold" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function SumTile({ label, sub, value, color }: { label: string; sub: string; value: string; color: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-canvas/50 px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-grey">{label}</div>
+      <div className="tnum font-display text-[16px] font-extrabold leading-tight" style={{ color }}>{value}</div>
+      <div className="text-[10px] text-muted">{sub}</div>
     </div>
   );
 }
@@ -211,6 +222,18 @@ function Claimable({ dataset }: { dataset: Dataset }) {
         <span className="text-grey">–</span>
         <DateField value={period.to} min={period.from} onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))} />
       </div>
+
+      {lines.length > 0 && (() => {
+        const grossAll = lines.reduce((s, l) => s + l.grossPaise, 0);
+        const reimbAll = lines.reduce((s, l) => s + l.claimablePaise, 0);
+        return (
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            <SumTile label="Office spend" sub="total in period" value={fmtINR(grossAll)} color={MONEY.out} />
+            <SumTile label="Reimbursable" sub="per your policy" value={fmtINR(reimbAll)} color={MONEY.reimb} />
+            <SumTile label="You bear" sub="policy gap" value={fmtINR(grossAll - reimbAll)} color={MONEY.net} />
+          </div>
+        );
+      })()}
 
       {lines.length === 0 ? (
         <EmptyState icon={Receipt} title="Nothing claimable in this period" hint="Mark office expenses as reimbursable (and add a matching policy) to see them here." compact />
