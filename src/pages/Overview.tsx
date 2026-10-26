@@ -23,7 +23,7 @@ import { getTxnType } from '../engine';
 import type { DateRange } from '../lib/dates';
 import { fmtAxis, fmtCompact, fmtINR, fmtPct, fmtDateFriendly, fmtRange } from '../lib/format';
 import { MONEY, colorForId, withAlpha } from '../lib/brand';
-import { buildLookups } from '../app/lookups';
+import { buildLookups, accountIcon, accountColor } from '../app/lookups';
 import { useApp } from '../app/context';
 import { Card, CardHeader, PageHeader, EmptyState } from '../components/ui/Card';
 import { Button } from '../components/ui/Controls';
@@ -46,6 +46,7 @@ export default function Overview({ dataset, snapshot, range }: { dataset: Datase
       <HeroRow snapshot={snapshot} />
       <SummaryCards snapshot={snapshot} />
       <ActionChips snapshot={snapshot} onGo={app.goTo} />
+      <AccountsCard snapshot={snapshot} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <InOutInvestChart snapshot={snapshot} />
@@ -58,6 +59,39 @@ export default function Overview({ dataset, snapshot, range }: { dataset: Datase
 
       <RecentTransactions dataset={dataset} look={look} />
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------- accounts */
+
+const ACCT_LABEL: Record<string, string> = { bank: 'Bank', cash: 'Cash wallet', credit_card: 'Credit card', broker_cash: 'Broker (usable cash)' };
+
+/** Current balance in each account — the usable cash sitting there right now.
+ *  Broker balances are the cash in that broker (holdings are shown separately). */
+function AccountsCard({ snapshot }: { snapshot: Snapshot }) {
+  const rows = snapshot.balances.filter((b) => b.account.active);
+  if (rows.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader icon={Wallet} title="Accounts" subtitle="What’s in each account right now — the cash you can use." accent={MONEY.net} />
+      <div className="divide-y divide-line">
+        {rows.map((b) => {
+          const Icon = accountIcon(b.account.type);
+          const color = accountColor(b.account.type);
+          const neg = b.balancePaise < 0;
+          return (
+            <div key={b.account.id} className="flex items-center gap-3 py-2.5">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: withAlpha(color, 0.14), color }}><Icon size={16} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold text-ink">{b.account.name}</div>
+                <div className="text-[11px] text-grey">{ACCT_LABEL[b.account.type] ?? b.account.type}{b.account.institution ? ` · ${b.account.institution}` : ''}</div>
+              </div>
+              <div className="tnum shrink-0 font-bold text-ink" style={neg ? { color: MONEY.out } : undefined}>{fmtINR(b.balancePaise)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
