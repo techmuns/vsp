@@ -187,33 +187,41 @@ function Accounts({ dataset }: { dataset: Dataset }) {
       {accounts.length === 0 && !adding ? (
         <EmptyState icon={Landmark} title="No accounts yet" hint="Add your first bank, cash wallet or card." compact />
       ) : (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {accounts.map((a) => {
-            const Icon = accountIcon(a.type);
-            const color = accountColor(a.type);
-            return (
-              <div key={a.id} className={`flex items-center gap-3 rounded-xl border border-line px-3 py-2.5 ${a.active ? 'bg-white' : 'bg-canvas opacity-60'}`}>
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: `${color}18`, color }}>
-                  <Icon size={17} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold text-ink">{a.name}</div>
-                  <div className="text-[11.5px] text-grey">
-                    {ACCOUNT_TYPES.find((t) => t.value === a.type)?.label}
-                    {a.institution ? ` · ${a.institution}` : ''} · opens {fmtINR(a.openingBalancePaise)}
-                  </div>
-                </div>
-                {a.demo && <Badge color={MONEY.invest}>demo</Badge>}
-                <button
-                  title={a.active ? 'Deactivate' : 'Reactivate'}
-                  onClick={() => setActive('accounts', a.id, !a.active)}
-                  className="grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5"
-                >
-                  <Power size={15} className={a.active ? 'text-money-save' : 'text-muted'} />
-                </button>
-              </div>
-            );
-          })}
+        <div className="nice-scroll mt-3 overflow-x-auto rounded-xl border border-line">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-line bg-canvas text-[10.5px] font-bold uppercase tracking-wide text-grey">
+                <th className="px-3 py-2 text-left">Account</th>
+                <th className="px-3 py-2 text-left">Type</th>
+                <th className="px-3 py-2 text-right">Opening balance</th>
+                <th className="px-3 py-2 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((a) => {
+                const Icon = accountIcon(a.type);
+                const color = accountColor(a.type);
+                return (
+                  <tr key={a.id} className={`border-b border-line/60 last:border-0 ${a.active ? '' : 'opacity-55'}`}>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ background: `${color}18`, color }}><Icon size={15} /></span>
+                        <span className="font-semibold text-ink">{a.name}</span>
+                        {a.demo && <Badge color={MONEY.invest}>demo</Badge>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-grey">{ACCOUNT_TYPES.find((t) => t.value === a.type)?.label}{a.institution ? ` · ${a.institution}` : ''}</td>
+                    <td className="tnum px-3 py-2 text-right text-slate">{fmtINR(a.openingBalancePaise)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button title={a.active ? 'Deactivate' : 'Reactivate'} onClick={() => setActive('accounts', a.id, !a.active)} className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-grey hover:bg-black/5">
+                        <Power size={15} className={a.active ? 'text-money-save' : 'text-muted'} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </Card>
@@ -317,7 +325,7 @@ function CategoryColumn({ dataset, kind, title, color }: { dataset: Dataset; kin
       {parents.length === 0 ? (
         <EmptyState icon={Tag} title="None yet" hint="Add categories as you need them, or load demo data." compact />
       ) : (
-        <div className="space-y-2">
+        <div className="overflow-hidden rounded-xl border border-line">
           {parents.map((c) => (
             <CategoryRow key={c.id} cat={c} kind={kind} subs={subsOf(c.id)} purposes={dataset.purposes} />
           ))}
@@ -343,7 +351,7 @@ function CategoryRow({ cat, kind, subs, purposes }: { cat: Category; kind: Categ
     toast(label ? `Tagged ${label}` : 'Tag removed', { tone: 'success' });
   };
   return (
-    <div className="rounded-xl border border-line bg-white px-3 py-2.5">
+    <div className="border-b border-line/60 bg-white px-3 py-2.5 last:border-0">
       <div className="flex items-center gap-2">
         <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: cat.colorKey ?? colorForId(cat.id) }} />
         <span className={`text-[13px] font-semibold ${cat.active ? 'text-ink' : 'text-muted line-through'}`}>{cat.name}</span>
@@ -458,19 +466,24 @@ function SimpleList({
       {sorted.length === 0 ? (
         <EmptyState icon={icon} title="None yet" compact />
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {sorted.map((it) => (
-            <span
-              key={it.id}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold ${it.active ? 'border-line bg-white text-slate' : 'border-line bg-canvas text-muted line-through'}`}
-            >
-              {it.name}
-              {it.demo && <span className="text-[9px] uppercase text-money-invest">demo</span>}
-              <button onClick={() => onToggle(it.id, !it.active)} className="text-muted hover:text-money-out">
-                <Power size={12} />
-              </button>
-            </span>
-          ))}
+        <div className="overflow-hidden rounded-xl border border-line">
+          <table className="w-full text-[13px]">
+            <tbody>
+              {sorted.map((it) => (
+                <tr key={it.id} className={`border-b border-line/60 last:border-0 ${it.active ? '' : 'opacity-55'}`}>
+                  <td className="px-3 py-2">
+                    <span className={`font-medium ${it.active ? 'text-ink' : 'text-muted line-through'}`}>{it.name}</span>
+                    {it.demo && <span className="ml-1.5 text-[9px] uppercase text-money-invest">demo</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => onToggle(it.id, !it.active)} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-grey hover:bg-black/5" title={it.active ? 'Deactivate' : 'Reactivate'}>
+                      <Power size={13} className={it.active ? 'text-money-save' : 'text-muted'} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </Card>
