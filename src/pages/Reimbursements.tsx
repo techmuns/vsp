@@ -251,23 +251,37 @@ function Claimable({ dataset }: { dataset: Dataset }) {
         <EmptyState icon={Receipt} title="Nothing claimable in this period" hint="Mark office expenses as reimbursable (and add a matching policy) to see them here." compact />
       ) : (
         <>
-          <div className="overflow-hidden rounded-xl border border-line">
-            {lines.map((l) => {
-              const on = !excluded.has(l.txnId);
-              const amt = overrides[l.txnId] ?? l.claimablePaise;
-              return (
-                <div key={l.txnId} className={`flex items-center gap-3 border-b border-line/70 px-3 py-2.5 last:border-0 ${on ? '' : 'opacity-45'}`}>
-                  <button onClick={() => setExcluded((s) => { const n = new Set(s); n.has(l.txnId) ? n.delete(l.txnId) : n.add(l.txnId); return n; })} className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${on ? 'border-brand bg-brand text-white' : 'border-line'}`}>{on && <Check size={11} strokeWidth={3} />}</button>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12.5px] font-semibold text-ink">{l.description || 'Expense'}</div>
-                    <div className="text-[11px] text-grey">{fmtDate(l.date)} · {look.catName(l.categoryId)} · gross {fmtINR(l.grossPaise)}</div>
-                  </div>
-                  <div className="w-28 shrink-0">
-                    <AmountField paise={amt} onPaise={(p) => setOverrides((o) => ({ ...o, [l.txnId]: p ?? 0 }))} />
-                  </div>
-                </div>
-              );
-            })}
+          <div className="nice-scroll overflow-x-auto rounded-xl border border-line">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="border-b border-line bg-canvas text-[10px] font-bold uppercase tracking-wide text-grey">
+                  <th className="w-8 px-3 py-2" />
+                  <th className="px-3 py-2 text-left">Expense</th>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Category</th>
+                  <th className="px-3 py-2 text-right">Gross</th>
+                  <th className="px-3 py-2 text-right">Claim ₹</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => {
+                  const on = !excluded.has(l.txnId);
+                  const amt = overrides[l.txnId] ?? l.claimablePaise;
+                  return (
+                    <tr key={l.txnId} className={`border-b border-line/70 last:border-0 ${on ? '' : 'opacity-45'}`}>
+                      <td className="px-3 py-2">
+                        <button onClick={() => setExcluded((s) => { const n = new Set(s); n.has(l.txnId) ? n.delete(l.txnId) : n.add(l.txnId); return n; })} className={`grid h-4 w-4 place-items-center rounded border ${on ? 'border-brand bg-brand text-white' : 'border-line'}`}>{on && <Check size={11} strokeWidth={3} />}</button>
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-ink">{l.description || 'Expense'}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-grey">{fmtDate(l.date)}</td>
+                      <td className="px-3 py-2 text-grey">{look.catName(l.categoryId)}</td>
+                      <td className="tnum px-3 py-2 text-right text-grey">{fmtINR(l.grossPaise)}</td>
+                      <td className="px-3 py-2 text-right"><div className="ml-auto w-24"><AmountField paise={amt} onPaise={(p) => setOverrides((o) => ({ ...o, [l.txnId]: p ?? 0 }))} /></div></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             <div className="text-[13px] text-grey">Claiming <b className="tnum text-ink">{includedIds.length}</b> of {lines.length} · total <b className="tnum text-money-reimb">{fmtINR(total)}</b></div>
