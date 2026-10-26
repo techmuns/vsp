@@ -277,6 +277,8 @@ export interface Settings {
   notificationPrefs?: NotificationPrefs;
   dismissedNotifications?: string[];
   lastBackupAt?: Timestamp;
+  /** When on, the app auto-downloads a backup on open if the last one is >7 days old. */
+  autoBackup?: boolean;
   /** Optional monthly spending-limit alert. */
   spendingLimitPaise?: Paise;
 }

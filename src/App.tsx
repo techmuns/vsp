@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppContext, type AppApi, type EditorArg, type QuickAddPrefill } from './app/context';
 import type { Page } from './app/nav';
 import { useDataset } from './db/hooks';
@@ -15,7 +15,8 @@ import { QuickAdd } from './components/quickadd/QuickAdd';
 import { TxnEditor } from './components/editor/TxnEditor';
 import { StatementImport } from './components/import/StatementImport';
 import { AiCategorize } from './components/ai/AiCategorize';
-import { ToastHost } from './app/toast';
+import { ToastHost, toast } from './app/toast';
+import { downloadBackup, AUTO_BACKUP_INTERVAL_MS } from './lib/backup';
 import { ConfirmHost } from './app/confirm';
 import { Onboarding } from './components/Onboarding';
 import Overview from './pages/Overview';
@@ -64,6 +65,22 @@ export default function App() {
       setOnboard(true);
     }
   }, [dataset?.settings, dataset?.accounts.length, dataset?.transactions.length]);
+
+  // Auto-backup: once per load, if enabled and the last backup is over a week old,
+  // quietly download a fresh one a moment after the app settles.
+  const autoBackupRan = useRef(false);
+  useEffect(() => {
+    const s = dataset?.settings;
+    if (!s || !s.autoBackup || autoBackupRan.current) return;
+    if (Date.now() - (s.lastBackupAt ?? 0) < AUTO_BACKUP_INTERVAL_MS) return;
+    autoBackupRan.current = true;
+    const id = window.setTimeout(() => {
+      downloadBackup()
+        .then(() => toast('Auto-backup saved to your Downloads', { tone: 'success' }))
+        .catch(() => {});
+    }, 1800);
+    return () => window.clearTimeout(id);
+  }, [dataset?.settings]);
 
   const salaryDay = dataset?.settings?.salaryCycleStartDay ?? 11;
   const earliest = useMemo(() => {

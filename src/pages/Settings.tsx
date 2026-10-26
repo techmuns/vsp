@@ -27,7 +27,6 @@ import {
   clearDemoData,
   confirmRecurring,
   ensurePurpose,
-  exportBackup,
   inspectBackup,
   loadBackupFromFile,
   removeEntity,
@@ -49,6 +48,7 @@ import { SCHEMA_VERSION } from '../db/db';
 import { loadDemoData } from '../demo/generate';
 import { describeSchedule, goalProgress, goalAllocationConflicts, getTxnType, type Snapshot } from '../engine';
 import { accountIcon, accountColor } from '../app/lookups';
+import { downloadBackup } from '../lib/backup';
 import { colorForId, MONEY } from '../lib/brand';
 import { fmtINR, fmtDate } from '../lib/format';
 import { todayISO } from '../db/ids';
@@ -877,18 +877,11 @@ function BackupCard({ dataset }: { dataset: Dataset }) {
   const [busy, setBusy] = useState(false);
   const last = dataset.settings?.lastBackupAt;
   const stale = !last || Date.now() - last > 14 * 864e5;
+  const auto = !!dataset.settings?.autoBackup;
   const download = async () => {
     setBusy(true);
     try {
-      const backup = await exportBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `kosh-backup-${todayISO()}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      await updateSettings({ lastBackupAt: Date.now() });
+      await downloadBackup();
       toast('Backup downloaded', { tone: 'success' });
     } finally {
       setBusy(false);
@@ -904,6 +897,13 @@ function BackupCard({ dataset }: { dataset: Dataset }) {
           {stale ? ' · a fresh one is a good idea' : ''}
         </div>
         <Button icon={Download} disabled={busy} onClick={download}>Download backup</Button>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-line bg-canvas/50 px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="text-[12.5px] font-semibold text-slate">Auto-backup weekly</div>
+          <div className="text-[11px] text-grey">When on, a backup downloads on its own the first time you open the app each week — saved to your Downloads folder. Keep a copy in Drive to be safe off this device.</div>
+        </div>
+        <Toggle checked={auto} onChange={(v) => { void updateSettings({ autoBackup: v }); toast(v ? 'Auto-backup on' : 'Auto-backup off', { tone: 'success' }); }} color={MONEY.save} />
       </div>
     </Card>
   );
