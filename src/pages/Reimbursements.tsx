@@ -20,7 +20,21 @@ import { Button, AmountField, DateField, Dropdown, Field, TextField, type Option
 
 type Tab = 'policies' | 'claimable' | 'claims' | 'settlement';
 
-export default function Reimbursements({ dataset, snapshot }: { dataset: Dataset; snapshot: Snapshot; range: DateRange }) {
+const EXPENSE_LIKE = new Set(['expense', 'cc_purchase', 'shared_expense']);
+/** Total "official" spend = every expense tagged with an Office purpose in a window
+ *  (reimbursable or not) — so you can see the whole office cost, not just claims. */
+function officeSpend(dataset: Dataset, from: string, to: string): number {
+  const ids = new Set(dataset.purposes.filter((p) => /office/i.test(p.name)).map((p) => p.id));
+  let sum = 0;
+  for (const t of dataset.transactions) {
+    if (t.voided || !EXPENSE_LIKE.has(t.type) || !t.purposeId || !ids.has(t.purposeId)) continue;
+    if (t.date < from || t.date > to) continue;
+    sum += t.amountPaise;
+  }
+  return sum;
+}
+
+export default function Reimbursements({ dataset, snapshot, range }: { dataset: Dataset; snapshot: Snapshot; range: DateRange }) {
   const [tab, setTab] = useState<Tab>('claimable');
   return (
     <div className="animate-fade-up space-y-4">
@@ -31,7 +45,7 @@ export default function Reimbursements({ dataset, snapshot }: { dataset: Dataset
         accent={MONEY.reimb}
         right={
           <div className="hidden gap-3 sm:flex">
-            <Mini label="Office spend" value={fmtINR(snapshot.reimb.eligibleGrossPaise)} color={MONEY.out} />
+            <Mini label="Office spend" value={fmtINR(officeSpend(dataset, range.from, range.to))} color={MONEY.out} />
             <Mini label="Reimbursable" value={fmtINR(snapshot.reimb.claimablePaise)} color={MONEY.reimb} />
             <Mini label="Pending" value={fmtINR(snapshot.reimb.outstandingPaise)} color={MONEY.receivable} />
           </div>
@@ -180,6 +194,8 @@ function Claimable({ dataset }: { dataset: Dataset }) {
   const lines = useMemo(() => buildClaimableLines({ transactions: dataset.transactions, splits: dataset.splits, policies: dataset.policies }, period), [dataset, period]);
   const total = claimBatchTotal(lines, { excludeIds: excluded, overrides });
   const includedIds = lines.filter((l) => !excluded.has(l.txnId)).map((l) => l.txnId);
+  const office = useMemo(() => officeSpend(dataset, period.from, period.to), [dataset, period]);
+  const reimbAll = lines.reduce((s, l) => s + l.claimablePaise, 0);
 
   async function createClaim() {
     if (includedIds.length === 0 || total <= 0) return;
@@ -223,17 +239,13 @@ function Claimable({ dataset }: { dataset: Dataset }) {
         <DateField value={period.to} min={period.from} onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))} />
       </div>
 
-      {lines.length > 0 && (() => {
-        const grossAll = lines.reduce((s, l) => s + l.grossPaise, 0);
-        const reimbAll = lines.reduce((s, l) => s + l.claimablePaise, 0);
-        return (
-          <div className="mb-3 grid grid-cols-3 gap-2">
-            <SumTile label="Office spend" sub="total in period" value={fmtINR(grossAll)} color={MONEY.out} />
-            <SumTile label="Reimbursable" sub="per your policy" value={fmtINR(reimbAll)} color={MONEY.reimb} />
-            <SumTile label="You bear" sub="policy gap" value={fmtINR(grossAll - reimbAll)} color={MONEY.net} />
-          </div>
-        );
-      })()}
+      {(office > 0 || lines.length > 0) && (
+        <div className="mb-3 grid grid-cols-3 gap-2">
+          <SumTile label="Office spend" sub="all official, this period" value={fmtINR(office)} color={MONEY.out} />
+          <SumTile label="Reimbursable" sub="comes back" value={fmtINR(reimbAll)} color={MONEY.reimb} />
+          <SumTile label="You bear" sub="your net cost" value={fmtINR(Math.max(0, office - reimbAll))} color={MONEY.net} />
+        </div>
+      )}
 
       {lines.length === 0 ? (
         <EmptyState icon={Receipt} title="Nothing claimable in this period" hint="Mark office expenses as reimbursable (and add a matching policy) to see them here." compact />
