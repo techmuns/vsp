@@ -275,7 +275,7 @@ function AccountForm({ onDone }: { onDone: () => void }) {
 
 function Categories({ dataset }: { dataset: Dataset }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid items-start gap-4 lg:grid-cols-2">
       <CategoryColumn dataset={dataset} kind="expense" title="Spending categories" color={MONEY.out} />
       <CategoryColumn dataset={dataset} kind="income" title="Income categories" color={MONEY.in} />
     </div>
@@ -398,7 +398,7 @@ function CategoryRow({ cat, kind, subs, purposes }: { cat: Category; kind: Categ
 
 function PeoplePurposes({ dataset }: { dataset: Dataset }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid items-start gap-4 lg:grid-cols-2">
       <SimpleList
         title="People"
         icon={Users}
