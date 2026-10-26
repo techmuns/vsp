@@ -16,7 +16,7 @@ import { toast } from '../app/toast';
 import { askConfirm } from '../app/confirm';
 import { Card, PageHeader, CardHeader, Badge, EmptyState } from '../components/ui/Card';
 import { SubTabs } from '../components/ui/Tabs';
-import { Button, AmountField, DateField, Dropdown, Field, TextField, type Option } from '../components/ui/Controls';
+import { Button, AmountField, DateField, Dropdown, Field, TextField, Toggle, type Option } from '../components/ui/Controls';
 
 type Tab = 'policies' | 'claimable' | 'claims' | 'settlement';
 
@@ -357,17 +357,26 @@ function ReceiptDialog({ claim, dataset, onClose }: { claim: ReimbursementClaim;
   const [amount, setAmount] = useState<number | null>(remaining);
   const [accountId, setAccountId] = useState('');
   const [date, setDate] = useState(todayISO());
+  const [extraAsIncome, setExtraAsIncome] = useState(true);
   const [busy, setBusy] = useState(false);
   const accountOpts: Option[] = dataset.accounts.filter((a) => a.active && (a.type === 'bank' || a.type === 'cash')).map((a) => ({ value: a.id, label: a.name }));
+
+  const extra = Math.max(0, (amount ?? 0) - remaining); // paid more than the claim
 
   async function save() {
     if (!amount || amount <= 0 || !accountId) return;
     setBusy(true);
     try {
-      await addTransaction({ type: 'reimbursement_receipt', amountPaise: amount, date, accountId, description: 'Reimbursement received' });
-      const newReceived = (claim.receivedPaise ?? 0) + amount;
+      // When more than the claim is received and the user keeps the extra, the
+      // matching part is a reimbursement and the surplus is income — so "owed"
+      // never goes negative.
+      const reimbPart = extraAsIncome ? Math.min(amount, remaining) : amount;
+      const extraPart = extraAsIncome ? amount - reimbPart : 0;
+      if (reimbPart > 0) await addTransaction({ type: 'reimbursement_receipt', amountPaise: reimbPart, date, accountId, description: 'Reimbursement received' });
+      if (extraPart > 0) await addTransaction({ type: 'income', amountPaise: extraPart, date, accountId, description: 'Extra from HR reimbursement (over claim)' });
+      const newReceived = (claim.receivedPaise ?? 0) + reimbPart;
       await updateClaim(claim.id, { receivedPaise: newReceived, status: newReceived >= claim.amountPaise ? 'received' : 'approved' });
-      toast('Receipt recorded', { tone: 'success' });
+      toast(extraPart > 0 ? `Recorded · ${fmtINR(extraPart)} logged as income` : 'Receipt recorded', { tone: 'success' });
       onClose();
     } finally {
       setBusy(false);
@@ -382,6 +391,15 @@ function ReceiptDialog({ claim, dataset, onClose }: { claim: ReimbursementClaim;
         <div className="space-y-3 p-4">
           <p className="text-[12.5px] text-grey">{fmtINR(remaining)} outstanding on this claim. Recording a receipt reduces what you’re owed — it is not counted as income.</p>
           <Field label="Amount received"><AmountField paise={amount} onPaise={setAmount} /></Field>
+          {extra > 0 && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-money-save/30 bg-money-save/[0.06] px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-semibold text-slate">{fmtINR(extra)} more than the claim</div>
+                <div className="text-[11px] text-grey">{extraAsIncome ? 'The extra is logged as income (money you keep).' : 'The extra is counted as reimbursement.'}</div>
+              </div>
+              <Toggle checked={extraAsIncome} onChange={setExtraAsIncome} color={MONEY.save} />
+            </div>
+          )}
           <Field label="Into account" required><Dropdown value={accountId} options={accountOpts} onChange={setAccountId} placeholder="Pick an account" width="100%" /></Field>
           <Field label="Date"><DateField value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           <div className="flex gap-2 pt-1"><Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button><Button onClick={save} disabled={!amount || !accountId || busy} className="flex-[2]">Record</Button></div>
