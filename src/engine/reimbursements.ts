@@ -87,6 +87,25 @@ export function buildClaimableLines(input: ClaimableInput, range: DateRange): Cl
   return lines.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
+/** One merged line per (day, category): gross spend of that category on that
+ *  day. Used for the HR copy so repeated legs (e.g. two office-commute trips on
+ *  the same day) show as a single category total; order follows the input. */
+export interface MergedClaimLine {
+  date: string;
+  categoryId?: string;
+  grossPaise: number;
+}
+export function mergeClaimLinesByDayCategory(lines: ClaimableLine[]): MergedClaimLine[] {
+  const merged = new Map<string, MergedClaimLine>();
+  for (const l of lines) {
+    const key = `${l.date}__${l.categoryId ?? ''}`;
+    const cur = merged.get(key);
+    if (cur) cur.grossPaise += l.grossPaise;
+    else merged.set(key, { date: l.date, categoryId: l.categoryId, grossPaise: l.grossPaise });
+  }
+  return Array.from(merged.values());
+}
+
 /**
  * Total of a claim batch: sum the claimable lines, skipping excluded ones and
  * honouring any per-line manual override (e.g. the user trims an amount).
