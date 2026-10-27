@@ -227,9 +227,12 @@ function Claimable({ dataset }: { dataset: Dataset }) {
     // Save it (marked submitted, since you're sending it now) and hand you the text.
     await saveClaim({ periodStart: period.from, periodEnd: period.to, txnIds: includedIds, amountPaise: total, status: 'submitted', submittedAt: Date.now() });
     const incl = lines.filter((l) => !excluded.has(l.txnId));
+    // HR gets the GROSS bills (actual amounts spent); they apply the policy
+    // and decide the reimbursement. Your claimable figure stays in-app only.
+    const grossTotal = incl.reduce((s, l) => s + l.grossPaise, 0);
     const text =
-      `Reimbursement claim — ${fmtDate(period.from)} to ${fmtDate(period.to)}\nTotal: ${fmtINR(total)}\n\n` +
-      incl.map((l) => `• ${fmtDate(l.date)}  ${l.description || look.catName(l.categoryId)}  ${fmtINR(overrides[l.txnId] ?? l.claimablePaise)}`).join('\n');
+      `Reimbursement claim — ${fmtDate(period.from)} to ${fmtDate(period.to)}\nTotal: ${fmtINR(grossTotal)}\n\n` +
+      incl.map((l) => `• ${fmtDate(l.date)}  ${l.description || look.catName(l.categoryId)}  ${fmtINR(l.grossPaise)}`).join('\n');
     const ok = await copyText(text);
     if (ok) {
       toast('Copied! Paste it into your email or WhatsApp to HR.', { tone: 'success' });
