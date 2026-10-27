@@ -10,7 +10,7 @@ import { copyText } from '../lib/clipboard';
 import { addTransaction, deleteClaim, removeEntity, saveClaim, savePolicy, setActive, updateClaim } from '../db/repo';
 import { buildLookups } from '../app/lookups';
 import { MONEY } from '../lib/brand';
-import { fmtINR, fmtDate, fmtRange } from '../lib/format';
+import { fmtINR, fmtDate, fmtRange, fmtWeekday } from '../lib/format';
 import { exportXlsx, printDocument, esc, type Row } from '../lib/exporters';
 import { toast } from '../app/toast';
 import { askConfirm } from '../app/confirm';
@@ -276,6 +276,7 @@ function Claimable({ dataset }: { dataset: Dataset }) {
                   <th className="w-8 px-3 py-2" />
                   <th className="px-3 py-2 text-left">Expense</th>
                   <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Day</th>
                   <th className="px-3 py-2 text-left">Category</th>
                   <th className="px-3 py-2 text-right">Gross</th>
                   <th className="px-3 py-2 text-right">Claim ₹</th>
@@ -292,6 +293,7 @@ function Claimable({ dataset }: { dataset: Dataset }) {
                       </td>
                       <td className="px-3 py-2 font-semibold text-ink">{l.description || 'Expense'}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-grey">{fmtDate(l.date)}</td>
+                      <td className="px-3 py-2 text-grey">{fmtWeekday(l.date)}</td>
                       <td className="px-3 py-2 text-grey">{look.catName(l.categoryId)}</td>
                       <td className="tnum px-3 py-2 text-right text-grey">{fmtINR(l.grossPaise)}</td>
                       <td className="px-3 py-2 text-right"><div className="ml-auto w-24"><AmountField paise={amt} onPaise={(p) => setOverrides((o) => ({ ...o, [l.txnId]: p ?? 0 }))} /></div></td>
