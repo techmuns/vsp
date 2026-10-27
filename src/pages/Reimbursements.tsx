@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Receipt, Plus, Trash2, Power, Copy, FileDown, Printer, Check, ArrowRight, Wallet } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
-import { buildClaimableLines, claimBatchTotal } from '../engine';
+import { buildClaimableLines, claimBatchTotal, mergeClaimLinesByDayCategory } from '../engine';
 import type { ClaimStatus, ReimbursementClaim } from '../db/types';
 import { resolveRange, startOfWeek, addDays, type DateRange } from '../lib/dates';
 import { todayISO } from '../db/ids';
@@ -229,10 +229,13 @@ function Claimable({ dataset }: { dataset: Dataset }) {
     const incl = lines.filter((l) => !excluded.has(l.txnId));
     // HR gets the GROSS bills (actual amounts spent); they apply the policy
     // and decide the reimbursement. Your claimable figure stays in-app only.
+    // Repeated category on the same day is merged into one category total
+    // (e.g. both office-commute legs on 16 Oct → one line); the on-screen
+    // Claimable list still shows every individual expense.
     const grossTotal = incl.reduce((s, l) => s + l.grossPaise, 0);
     const text =
       `Reimbursement claim — ${fmtDate(period.from)} to ${fmtDate(period.to)}\nTotal: ${fmtINR(grossTotal)}\n\n` +
-      incl.map((l) => `• ${fmtDate(l.date)}  ${l.description || look.catName(l.categoryId)}  ${fmtINR(l.grossPaise)}`).join('\n');
+      mergeClaimLinesByDayCategory(incl).map((g) => `• ${fmtDate(g.date)}  ${look.catName(g.categoryId)}  ${fmtINR(g.grossPaise)}`).join('\n');
     const ok = await copyText(text);
     if (ok) {
       toast('Copied! Paste it into your email or WhatsApp to HR.', { tone: 'success' });
