@@ -97,11 +97,12 @@ const STATUS_OPTS: Option<TxnStatus>[] = [
   { value: 'scheduled', label: 'Scheduled' },
 ];
 
-export function TxnEditor({ open, arg, dataset, onClose }: { open: boolean; arg: EditorArg; dataset: Dataset; onClose: () => void }) {
+export function TxnEditor({ open, arg, dataset, onClose, defaultAccountId: selectedAccountId }: { open: boolean; arg: EditorArg; dataset: Dataset; onClose: () => void; defaultAccountId?: string }) {
   const existing = arg.txnId ? dataset.transactions.find((t) => t.id === arg.txnId) : undefined;
   const existingSplits = useMemo(() => (arg.txnId ? dataset.splits.filter((s) => s.txnId === arg.txnId) : []), [arg.txnId, dataset.splits]);
 
-  const defaultAccountId = dataset.accounts.find((a) => a.active)?.id ?? '';
+  // Default to the globally-selected account when one is picked, else the first active account.
+  const defaultAccountId = selectedAccountId || dataset.accounts.find((a) => a.active)?.id || '';
   const [d, setD] = useState<Draft>(() => (existing ? fromTxn(existing, existingSplits) : fromPrefill(arg.prefill, defaultAccountId)));
   const [saving, setSaving] = useState(false);
   const [showMore, setShowMore] = useState(false);

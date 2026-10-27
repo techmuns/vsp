@@ -185,8 +185,8 @@ export default function App() {
           </main>
         </div>
 
-        <QuickAdd open={qa.open} prefill={qa.prefill} dataset={dataset} onClose={() => setQa({ open: false })} />
-        <TxnEditor open={editor.open} arg={editor.arg} dataset={dataset} onClose={() => setEditor({ open: false, arg: {} })} />
+        <QuickAdd open={qa.open} prefill={qa.prefill} dataset={dataset} defaultAccountId={accountFilter !== 'all' ? accountFilter : undefined} onClose={() => setQa({ open: false })} />
+        <TxnEditor open={editor.open} arg={editor.arg} dataset={dataset} defaultAccountId={accountFilter !== 'all' ? accountFilter : undefined} onClose={() => setEditor({ open: false, arg: {} })} />
         <StatementImport open={importOpen} dataset={dataset} onClose={() => setImportOpen(false)} />
         <AiCategorize open={aiOpen} dataset={dataset} onClose={() => setAiOpen(false)} />
         {onboard && <Onboarding onClose={() => setOnboard(false)} />}

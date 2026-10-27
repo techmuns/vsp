@@ -4,7 +4,7 @@ import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
 import { spendBreakdown, eventBreakdown, budgetProgress, budgetActual, getTxnType } from '../engine';
 import type { Budget, BudgetScope } from '../db/types';
-import { addMonths, endOfMonth, startOfMonth, type DateRange } from '../lib/dates';
+import { addMonths, endOfMonth, startOfMonth, inRange, type DateRange } from '../lib/dates';
 import { buildLookups } from '../app/lookups';
 import { useApp } from '../app/context';
 import { MONEY } from '../lib/brand';
@@ -20,6 +20,8 @@ import { Columns } from '../components/charts/Columns';
 import { HBars, type HBarDatum } from '../components/charts/Bars';
 
 type Tab = 'category' | 'trends' | 'purpose' | 'budgets' | 'events';
+
+const EXPENSE_LIKE = new Set(['expense', 'cc_purchase', 'shared_expense', 'cc_fee']);
 
 export default function Expenses({ dataset, snapshot, range }: { dataset: Dataset; snapshot: Snapshot; range: DateRange }) {
   const [tab, setTab] = useState<Tab>('category');
@@ -43,7 +45,7 @@ export default function Expenses({ dataset, snapshot, range }: { dataset: Datase
       />
       {tab === 'category' && <ByCategory bd={bd} look={look} />}
       {tab === 'trends' && <Trends eInput={eInput} range={range} bd={bd} look={look} dataset={dataset} />}
-      {tab === 'purpose' && <ByPurpose bd={bd} look={look} />}
+      {tab === 'purpose' && <ByPurpose bd={bd} look={look} dataset={dataset} range={range} />}
       {tab === 'budgets' && <Budgets dataset={dataset} snapshot={snapshot} eInput={eInput} range={range} look={look} />}
       {tab === 'events' && <ByEvent eInput={eInput} range={range} dataset={dataset} />}
     </div>
@@ -177,12 +179,18 @@ function Trends({ eInput, range, bd, look, dataset }: { eInput: { transactions: 
   );
 }
 
-function ByPurpose({ bd, look }: { bd: BD; look: Look }) {
+function ByPurpose({ bd, look, dataset, range }: { bd: BD; look: Look; dataset: Dataset; range: DateRange }) {
+  const app = useApp();
+  const [exp, setExp] = useState<string | null>(null);
   const rows = Object.entries(bd.byPurpose).filter(([, v]) => v.grossPaise > 0).sort((a, b) => b[1].grossPaise - a[1].grossPaise);
   const totalGross = rows.reduce((s, [, v]) => s + v.grossPaise, 0);
   const totalClaim = rows.reduce((s, [, v]) => s + v.claimablePaise, 0);
   const totalNet = rows.reduce((s, [, v]) => s + v.netPaise, 0);
   if (rows.length === 0) return <Card><EmptyState icon={Briefcase} title="No tagged spend yet" hint="Tag expenses with a purpose (Office / Personal) to see this split." /></Card>;
+  const txnsFor = (pid: string) =>
+    dataset.transactions
+      .filter((t) => !t.voided && EXPENSE_LIKE.has(t.type) && (t.purposeId ?? '') === pid && inRange(t.date, range.from, range.to))
+      .sort((a, b) => b.amountPaise - a.amountPaise);
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
@@ -192,20 +200,54 @@ function ByPurpose({ bd, look }: { bd: BD; look: Look }) {
       </div>
       <Card pad={false}>
         <table className="w-full text-[12.5px]">
-          <thead><tr className="bg-canvas text-[10.5px] font-bold uppercase tracking-wide text-grey"><th className="px-3 py-2 text-left">Purpose</th><th className="px-3 py-2 text-right">Gross</th><th className="px-3 py-2 text-right">Claimable back</th><th className="px-3 py-2 text-right">Net personal cost</th></tr></thead>
+          <thead><tr className="bg-canvas text-[10.5px] font-bold uppercase tracking-wide text-grey"><th className="px-3 py-2 text-left">Purpose</th><th className="px-3 py-2 text-right">Gross</th><th className="px-3 py-2 text-right">Claimable back</th><th className="px-3 py-2 text-right">Net personal cost</th><th className="w-8" /></tr></thead>
           <tbody>
-            {rows.map(([pid, v]) => (
-              <tr key={pid} className="border-b border-line/70 last:border-0">
-                <td className="px-3 py-2 font-semibold text-ink">{pid ? look.purposeName(pid) : 'Unspecified'}</td>
-                <td className="tnum px-3 py-2 text-right text-slate">{fmtINR(v.grossPaise)}</td>
-                <td className="tnum px-3 py-2 text-right text-money-reimb">{v.claimablePaise > 0 ? fmtINR(v.claimablePaise) : '—'}</td>
-                <td className="tnum px-3 py-2 text-right font-bold text-money-out">{fmtINR(v.netPaise)}</td>
-              </tr>
-            ))}
+            {rows.map(([pid, v]) => {
+              const open = exp === pid;
+              const txns = open ? txnsFor(pid) : [];
+              return (
+                <Fragment key={pid}>
+                  <tr className="border-b border-line/70 last:border-0 hover:bg-canvas">
+                    <td className="px-3 py-2">
+                      <button onClick={() => setExp(open ? null : pid)} className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                        <ChevronRight size={13} className={`text-grey transition ${open ? 'rotate-90' : ''}`} />
+                        {pid ? look.purposeName(pid) : 'Unspecified'}
+                      </button>
+                    </td>
+                    <td className="tnum px-3 py-2 text-right text-slate">{fmtINR(v.grossPaise)}</td>
+                    <td className="tnum px-3 py-2 text-right text-money-reimb">{v.claimablePaise > 0 ? fmtINR(v.claimablePaise) : '—'}</td>
+                    <td className="tnum px-3 py-2 text-right font-bold text-money-out">{fmtINR(v.netPaise)}</td>
+                    <td className="px-2 py-2 text-right">{pid && <button onClick={() => app.openTransactions({ purposeIds: [pid] })} title="Open in Transactions" className="text-brand hover:text-brand/70"><ArrowRight size={14} /></button>}</td>
+                  </tr>
+                  {open && (
+                    <tr className="bg-canvas/40">
+                      <td colSpan={5} className="px-3 py-2.5">
+                        <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-grey">{pid ? look.purposeName(pid) : 'Unspecified'} transactions · highest first</div>
+                        {txns.length === 0 ? (
+                          <div className="text-[11.5px] text-muted">No individual transactions in this period.</div>
+                        ) : (
+                          <div className="divide-y divide-line/70">
+                            {txns.map((t) => (
+                              <button key={t.id} onClick={() => app.openEditor({ txnId: t.id })} className="flex w-full items-center gap-3 py-1.5 text-left hover:opacity-80">
+                                <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: t.categoryId ? look.catColor(t.categoryId) : MONEY.transfer }} />
+                                <span className="min-w-0 flex-1 truncate font-medium text-ink">{t.description || getTxnType(t.type)?.label}</span>
+                                <span className="hidden shrink-0 text-[11px] text-grey sm:inline">{t.categoryId ? look.catName(t.categoryId) : ''}</span>
+                                <span className="shrink-0 text-[11px] text-grey">{fmtDate(t.date)}</span>
+                                <span className="tnum w-24 shrink-0 text-right font-bold text-money-out">{fmtINR(t.amountPaise)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </Card>
-      <p className="px-1 text-[11.5px] text-grey">Net personal cost is what you actually bear — gross spend minus what’s claimable back under your reimbursement policies.</p>
+      <p className="px-1 text-[11.5px] text-grey">Net personal cost is what you actually bear — gross spend minus what’s claimable back under your reimbursement policies. Tap any purpose to see its transactions, highest spend first.</p>
     </div>
   );
 }
