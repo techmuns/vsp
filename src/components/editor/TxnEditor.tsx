@@ -78,7 +78,7 @@ function fromPrefill(prefill?: Partial<Transaction>, defaultAccountId = ''): Dra
     purposeId: prefill?.purposeId ?? '',
     personId: prefill?.personId ?? '',
     investmentId: prefill?.investmentId ?? '',
-    units: '',
+    units: prefill?.units != null ? String(prefill.units) : '',
     reimbursable: !!prefill?.reimbursable,
     tags: '',
     eventId: prefill?.eventId ?? '',

@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { TrendingUp, PieChart, Activity, Plus, RefreshCw, Wifi, WifiOff, Link2, Pencil, Trash2 } from 'lucide-react';
+import { TrendingUp, PieChart, Activity, Plus, RefreshCw, Wifi, WifiOff, Link2, Pencil, Trash2, ArrowDownRight, ArrowUpRight, Repeat, Coins } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
 import { latestPriceAsOf, getTxnType, INVESTMENT_TYPES } from '../engine';
@@ -92,7 +92,11 @@ function assetClassOf(inv?: Dataset['investments'][number]): AssetClass {
   return 'Other';
 }
 
+type Pos = PF['byInvestment'][string];
+
 function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invById: InvMap; asOf: string }) {
+  const app = useApp();
+  const [menu, setMenu] = useState<{ p: Pos; x: number; y: number } | null>(null);
   const rows = Object.values(pf.byInvestment).filter((p) => p.units > 0 || p.costPaise > 0).sort((a, b) => b.valuePaise - a.valuePaise);
   if (rows.length === 0) return <Card><EmptyState icon={TrendingUp} title="No open holdings" hint="Buys will show here with cost and value." compact /></Card>;
   const groups = CLASS_ORDER.map((cls) => {
@@ -101,6 +105,7 @@ function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invB
   }).filter((g) => g.rows.length > 0);
   const grouped = groups.length > 1;
   return (
+    <>
     <Card pad={false}>
       <div className="nice-scroll overflow-x-auto">
         <table className="w-full text-[12.5px]">
@@ -125,7 +130,7 @@ function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invB
                   const meta = priceMeta(prices, p.investmentId, asOf);
                   const plPct = p.costPaise > 0 && p.unrealizedPaise != null ? (p.unrealizedPaise / p.costPaise) * 100 : null;
                   return (
-                    <tr key={p.investmentId} className="border-b border-line/70 last:border-0">
+                    <tr key={p.investmentId} onClick={(e) => setMenu({ p, x: e.clientX, y: e.clientY })} onContextMenu={(e) => { e.preventDefault(); setMenu({ p, x: e.clientX, y: e.clientY }); }} className="cursor-pointer border-b border-line/70 last:border-0 hover:bg-canvas">
                       <td className="px-3 py-2"><div className="font-semibold text-ink">{inv?.name ?? '—'}</div><div className="text-[11px] text-grey">{inv?.platform}{inv?.symbol ? ` · ${inv.symbol}` : ''}</div></td>
                       <td className="tnum px-3 py-2 text-right text-slate">{fmtUnits(p.units)}</td>
                       <td className="tnum px-3 py-2 text-right text-grey">{avg > 0 ? fmtINR(Math.round(avg)) : '—'}</td>
@@ -157,7 +162,32 @@ function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invB
           </tbody>
         </table>
       </div>
+      <div className="border-t border-line px-3 py-2 text-[11px] text-grey">Tip: tap or right-click any holding to sell, buy more or log a dividend — Sell opens with your held quantity ready.</div>
     </Card>
+    {menu && (
+      <>
+        <div className="fixed inset-0 z-[65]" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
+        <div className="fixed z-[70] w-56 overflow-hidden rounded-xl border border-line bg-white py-1 shadow-pop" style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 232)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 236)) }}>
+          <div className="border-b border-line px-3 py-1.5">
+            <div className="truncate text-[12px] font-bold text-ink">{invById.get(menu.p.investmentId)?.name ?? 'Holding'}</div>
+            <div className="tnum text-[10.5px] text-grey">{fmtUnits(menu.p.units)} units held{menu.p.valuePaise > 0 ? ` · ${fmtINR(menu.p.valuePaise)}` : ''}</div>
+          </div>
+          <button onClick={() => { app.openEditor({ prefill: { type: 'investment_sell', investmentId: menu.p.investmentId, units: menu.p.units, amountPaise: menu.p.valuePaise > 0 ? menu.p.valuePaise : undefined } }); setMenu(null); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12.5px] hover:bg-canvas">
+            <ArrowDownRight size={15} className="text-money-out" /><span className="flex-1 font-semibold text-ink">Sell holding</span><span className="tnum text-[10.5px] text-grey">{fmtUnits(menu.p.units)} units</span>
+          </button>
+          <button onClick={() => { app.openEditor({ prefill: { type: 'investment_buy', investmentId: menu.p.investmentId } }); setMenu(null); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12.5px] hover:bg-canvas">
+            <ArrowUpRight size={15} className="text-money-invest" /><span className="flex-1 font-medium text-ink">Buy more</span>
+          </button>
+          <button onClick={() => { app.openEditor({ prefill: { type: 'investment_contribution', investmentId: menu.p.investmentId } }); setMenu(null); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12.5px] hover:bg-canvas">
+            <Repeat size={15} className="text-grey" /><span className="flex-1 font-medium text-ink">SIP / add</span>
+          </button>
+          <button onClick={() => { app.openEditor({ prefill: { type: 'investment_dividend', investmentId: menu.p.investmentId } }); setMenu(null); }} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12.5px] hover:bg-canvas">
+            <Coins size={15} className="text-money-save" /><span className="flex-1 font-medium text-ink">Dividend</span>
+          </button>
+        </div>
+      </>
+    )}
+    </>
   );
 }
 
