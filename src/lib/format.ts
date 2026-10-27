@@ -117,6 +117,16 @@ export function fmtDayMonth(d: string | Date | null | undefined): string {
   return `${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
 }
 
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "2026-10-16" → "Fri" (short weekday name). */
+export function fmtWeekday(d: string | Date | null | undefined): string {
+  if (!d) return '—';
+  const dt = asDate(d);
+  if (isNaN(dt.getTime())) return '—';
+  return WEEKDAYS[dt.getDay()];
+}
+
 /** A Date or "2026-10" → "Oct '26" */
 export function fmtMonth(d: string | Date): string {
   if (typeof d === 'string' && /^\d{4}-\d{2}$/.test(d)) {
