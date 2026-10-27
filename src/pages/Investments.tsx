@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { TrendingUp, PieChart, Activity, Plus, RefreshCw, Wifi, WifiOff, Link2, Pencil } from 'lucide-react';
+import { TrendingUp, PieChart, Activity, Plus, RefreshCw, Wifi, WifiOff, Link2, Pencil, Trash2 } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
 import { latestPriceAsOf, getTxnType, INVESTMENT_TYPES } from '../engine';
@@ -8,8 +8,9 @@ import { isStalePrice, type MarketPricesState } from '../app/market';
 import type { DateRange } from '../lib/dates';
 import { MONEY, colorForId } from '../lib/brand';
 import { fmtINR, fmtCompact, fmtPct, fmtUnits, fmtDate } from '../lib/format';
-import { upsertPrice, saveInvestment } from '../db/repo';
+import { upsertPrice, saveInvestment, deleteTransaction } from '../db/repo';
 import { toast } from '../app/toast';
+import { askConfirm } from '../app/confirm';
 import { useApp } from '../app/context';
 import { Card, PageHeader, CardHeader, EmptyState, Badge, MiniStat } from '../components/ui/Card';
 import { SubTabs } from '../components/ui/Tabs';
@@ -75,7 +76,7 @@ type InvMap = Map<string, Dataset['investments'][number]>;
 
 function priceMeta(prices: Price[], invId: string, asOf: string) {
   const p = latestPriceAsOf(prices, invId, asOf);
-  return p ? { source: p.source, date: p.date, stale: isStalePrice(p.date, asOf) } : null;
+  return p ? { source: p.source, date: p.date, pricePaise: p.pricePaise, stale: isStalePrice(p.date, asOf) } : null;
 }
 
 type AssetClass = 'Mutual funds' | 'Stocks' | 'Other';
@@ -104,7 +105,7 @@ function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invB
       <div className="nice-scroll overflow-x-auto">
         <table className="w-full text-[12.5px]">
           <thead><tr className="bg-canvas text-[10.5px] font-bold uppercase tracking-wide text-grey">
-            <th className="px-3 py-2 text-left">Holding</th><th className="px-3 py-2 text-right">Units</th><th className="px-3 py-2 text-right">Avg cost</th><th className="px-3 py-2 text-right">Invested</th><th className="px-3 py-2 text-right">Value</th><th className="px-3 py-2 text-right">P/L</th><th className="px-3 py-2 text-left">Price</th>
+            <th className="px-3 py-2 text-left">Holding</th><th className="px-3 py-2 text-right">Units</th><th className="px-3 py-2 text-right">Avg cost</th><th className="px-3 py-2 text-right">Invested</th><th className="px-3 py-2 text-right">Value</th><th className="px-3 py-2 text-right">P/L</th><th className="px-3 py-2 text-right">Price / NAV</th>
           </tr></thead>
           <tbody>
             {groups.map((g) => (
@@ -133,14 +134,17 @@ function Holdings({ pf, prices, invById, asOf }: { pf: PF; prices: Price[]; invB
                       <td className="tnum px-3 py-2 text-right font-bold" style={{ color: !p.hasPrice ? MONEY.transfer : (p.unrealizedPaise ?? 0) >= 0 ? MONEY.in : MONEY.out }}>
                         {!p.hasPrice ? '—' : <>{fmtINR(p.unrealizedPaise!)}{plPct != null && <span className="ml-1 text-[10.5px] font-semibold">{plPct >= 0 ? '+' : ''}{plPct.toFixed(1)}%</span>}</>}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 text-right">
                         {meta ? (
-                          <span className="inline-flex items-center gap-1 text-[11px]">
-                            <span className="text-grey">{fmtDate(meta.date)}</span>
-                            <Badge color={meta.source === 'demo' || meta.source === 'manual' ? MONEY.transfer : MONEY.reimb}>{meta.source}</Badge>
-                            {meta.stale && <Badge color={MONEY.out}>stale</Badge>}
-                          </span>
-                        ) : <span className="text-[11px] italic text-muted">price as of —</span>}
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="tnum text-[12.5px] font-semibold text-ink">{fmtINR(meta.pricePaise)}</span>
+                            <span className="inline-flex items-center gap-1 text-[10.5px]">
+                              <span className="text-grey">{fmtDate(meta.date)}</span>
+                              <Badge color={meta.source === 'demo' || meta.source === 'manual' ? MONEY.transfer : MONEY.reimb}>{meta.source}</Badge>
+                              {meta.stale && <Badge color={MONEY.out}>stale</Badge>}
+                            </span>
+                          </div>
+                        ) : <span className="text-[11px] italic text-muted">No price yet</span>}
                       </td>
                     </tr>
                   );
@@ -188,6 +192,20 @@ function ActivityTab({ dataset, invById }: { dataset: Dataset; invById: InvMap }
   const app = useApp();
   const acts = dataset.transactions.filter((t) => !t.voided && t.investmentId && INVESTMENT_TYPES.has(t.type)).sort((a, b) => (a.date < b.date ? 1 : -1));
   const quick = (type: string, label: string) => <Button variant="outline" size="sm" onClick={() => app.openEditor({ prefill: { type } })}>{label}</Button>;
+
+  async function handleDelete(t: Dataset['transactions'][number]) {
+    const def = getTxnType(t.type);
+    const inv = invById.get(t.investmentId!);
+    const ok = await askConfirm({
+      title: 'Delete this entry?',
+      message: `${inv?.name ? inv.name + ' · ' : ''}${def?.label ?? 'Entry'} · ${fmtINR(t.amountPaise)}. This permanently removes it from your records.`,
+      danger: true,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    await deleteTransaction(t.id);
+    toast('Entry deleted', { tone: 'error' });
+  }
   return (
     <Card pad={false}>
       <div className="flex flex-wrap gap-2 border-b border-line p-3">
@@ -200,20 +218,26 @@ function ActivityTab({ dataset, invById }: { dataset: Dataset; invById: InvMap }
       {acts.length === 0 ? (
         <EmptyState icon={Activity} title="No activity yet" hint="Record buys, sells, SIPs, dividends and charges." compact />
       ) : (
-        <div className="divide-y divide-line">
-          {acts.map((t) => {
-            const def = getTxnType(t.type);
-            const inv = invById.get(t.investmentId!);
-            const out = def?.direction === 'out';
-            return (
-              <button key={t.id} onClick={() => app.openEditor({ txnId: t.id })} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-canvas">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-money-invest/12 text-[11px] font-bold text-money-invest">{def?.label?.slice(0, 1)}</span>
-                <div className="min-w-0 flex-1"><div className="truncate font-semibold text-ink">{inv?.name ?? t.description ?? def?.label}</div><div className="text-[11px] text-grey">{fmtDate(t.date)} · {def?.label}{t.units ? ` · ${fmtUnits(t.units)} units` : ''}</div></div>
-                <span className="tnum shrink-0 font-bold" style={{ color: out ? MONEY.out : MONEY.in }}>{out ? '−' : '+'}{fmtINR(t.amountPaise)}</span>
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <div className="border-b border-line bg-canvas/40 px-3 py-1.5 text-[11px] text-grey">Full ledger of every investment entry — tap a row to edit, or use the trash icon to delete a wrong one.</div>
+          <div className="divide-y divide-line">
+            {acts.map((t) => {
+              const def = getTxnType(t.type);
+              const inv = invById.get(t.investmentId!);
+              const out = def?.direction === 'out';
+              return (
+                <div key={t.id} className="flex items-center gap-2 pr-2 hover:bg-canvas">
+                  <button onClick={() => app.openEditor({ txnId: t.id })} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-money-invest/12 text-[11px] font-bold text-money-invest">{def?.label?.slice(0, 1)}</span>
+                    <div className="min-w-0 flex-1"><div className="truncate font-semibold text-ink">{inv?.name ?? t.description ?? def?.label}</div><div className="text-[11px] text-grey">{fmtDate(t.date)} · {def?.label}{t.units ? ` · ${fmtUnits(t.units)} units` : ''}</div></div>
+                    <span className="tnum shrink-0 font-bold" style={{ color: out ? MONEY.out : MONEY.in }}>{out ? '−' : '+'}{fmtINR(t.amountPaise)}</span>
+                  </button>
+                  <button onClick={() => handleDelete(t)} title="Delete this entry" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-grey transition hover:bg-money-out/10 hover:text-money-out"><Trash2 size={15} /></button>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </Card>
   );

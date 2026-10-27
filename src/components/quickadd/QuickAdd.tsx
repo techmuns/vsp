@@ -68,8 +68,9 @@ function initialDraft(prefill?: QuickAddPrefill, defaultAccountId = ''): Draft {
   };
 }
 
-export function QuickAdd({ open, prefill, onClose, dataset }: { open: boolean; prefill?: QuickAddPrefill; onClose: () => void; dataset: Dataset }) {
-  const defaultAccountId = dataset.accounts.find((a) => a.active)?.id ?? '';
+export function QuickAdd({ open, prefill, onClose, dataset, defaultAccountId: selectedAccountId }: { open: boolean; prefill?: QuickAddPrefill; onClose: () => void; dataset: Dataset; defaultAccountId?: string }) {
+  // Default to the globally-selected account when one is picked, else the first active account.
+  const defaultAccountId = selectedAccountId || dataset.accounts.find((a) => a.active)?.id || '';
   const [d, setD] = useState<Draft>(() => initialDraft(prefill, defaultAccountId));
   const [showMore, setShowMore] = useState(false);
   const [saving, setSaving] = useState(false);

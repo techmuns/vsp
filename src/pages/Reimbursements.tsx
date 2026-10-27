@@ -34,6 +34,21 @@ function officeSpend(dataset: Dataset, from: string, to: string): number {
   return sum;
 }
 
+/** Truly personal spend = expense-like money that is NOT office-tagged and NOT
+ *  reimbursable — what leaves your pocket for good, shown here for comparison. */
+function personalSpend(dataset: Dataset, from: string, to: string): number {
+  const officeIds = new Set(dataset.purposes.filter((p) => /office/i.test(p.name)).map((p) => p.id));
+  let sum = 0;
+  for (const t of dataset.transactions) {
+    if (t.voided || !EXPENSE_LIKE.has(t.type)) continue;
+    if (t.date < from || t.date > to) continue;
+    if (t.purposeId && officeIds.has(t.purposeId)) continue; // office spend, counted separately
+    if (t.reimbursable) continue; // comes back, so not a personal cost
+    sum += t.amountPaise;
+  }
+  return sum;
+}
+
 export default function Reimbursements({ dataset, snapshot, range }: { dataset: Dataset; snapshot: Snapshot; range: DateRange }) {
   const [tab, setTab] = useState<Tab>('claimable');
   return (
@@ -46,6 +61,7 @@ export default function Reimbursements({ dataset, snapshot, range }: { dataset: 
         right={
           <div className="hidden gap-3 sm:flex">
             <Mini label="Office spend" value={fmtINR(officeSpend(dataset, range.from, range.to))} color={MONEY.out} />
+            <Mini label="Personal spend" value={fmtINR(personalSpend(dataset, range.from, range.to))} color={MONEY.net} />
             <Mini label="Reimbursable" value={fmtINR(snapshot.reimb.claimablePaise)} color={MONEY.reimb} />
             <Mini label="Pending" value={fmtINR(snapshot.reimb.outstandingPaise)} color={MONEY.receivable} />
           </div>
@@ -195,6 +211,7 @@ function Claimable({ dataset }: { dataset: Dataset }) {
   const total = claimBatchTotal(lines, { excludeIds: excluded, overrides });
   const includedIds = lines.filter((l) => !excluded.has(l.txnId)).map((l) => l.txnId);
   const office = useMemo(() => officeSpend(dataset, period.from, period.to), [dataset, period]);
+  const personal = useMemo(() => personalSpend(dataset, period.from, period.to), [dataset, period]);
   const reimbAll = lines.reduce((s, l) => s + l.claimablePaise, 0);
 
   async function createClaim() {
@@ -239,11 +256,12 @@ function Claimable({ dataset }: { dataset: Dataset }) {
         <DateField value={period.to} min={period.from} onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))} />
       </div>
 
-      {(office > 0 || lines.length > 0) && (
-        <div className="mb-3 grid grid-cols-3 gap-2">
+      {(office > 0 || personal > 0 || lines.length > 0) && (
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <SumTile label="Office spend" sub="all official, this period" value={fmtINR(office)} color={MONEY.out} />
           <SumTile label="Reimbursable" sub="comes back" value={fmtINR(reimbAll)} color={MONEY.reimb} />
-          <SumTile label="You bear" sub="your net cost" value={fmtINR(Math.max(0, office - reimbAll))} color={MONEY.net} />
+          <SumTile label="You bear" sub="office, net cost" value={fmtINR(Math.max(0, office - reimbAll))} color={MONEY.receivable} />
+          <SumTile label="Personal spend" sub="not office, not reimbursed" value={fmtINR(personal)} color={MONEY.net} />
         </div>
       )}
 
