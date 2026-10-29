@@ -33,6 +33,22 @@ function parts(txn: Transaction, splits: Split[]): Array<Partial<Split> & { amou
   return [{ amountPaise: txn.amountPaise, categoryId: txn.categoryId, subcategoryId: txn.subcategoryId, purposeId: txn.purposeId, reimbursable: txn.reimbursable }];
 }
 
+/**
+ * My own gross spend on a single transaction that falls under a given purpose.
+ * Mirrors the `byPurpose` grouping in `spendBreakdown`: use the splits when
+ * present, skip any part that is a person's share, and fall back each part's
+ * purpose to the transaction's. For a split expense this returns only MY
+ * portion, not the friend's — so it matches the purpose row's Gross total.
+ */
+export function txnGrossForPurpose(txn: Transaction, splits: Split[], purposeId: string): number {
+  let gross = 0;
+  for (const part of parts(txn, splits)) {
+    if (part.personId) continue; // friend's share
+    if ((part.purposeId ?? txn.purposeId ?? '') === purposeId) gross += part.amountPaise;
+  }
+  return gross;
+}
+
 /** Category / subcategory / purpose spend breakdown for a date range. */
 export function spendBreakdown(
   input: { transactions: Transaction[]; splits: Split[]; policies: ReimbursementPolicy[] },

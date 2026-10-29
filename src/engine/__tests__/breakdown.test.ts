@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { spendBreakdown } from '../breakdown';
-import { FULL_YEAR, input, policy, R, txn } from './_helpers';
+import { spendBreakdown, txnGrossForPurpose } from '../breakdown';
+import { FULL_YEAR, input, policy, R, split, txn } from './_helpers';
 
 describe('spend breakdown', () => {
   it('splits spend by category, subcategory and purpose, net of reimbursements', () => {
@@ -16,6 +16,27 @@ describe('spend breakdown', () => {
     expect(bd.byPurpose['office']).toEqual({ grossPaise: R(1000), claimablePaise: R(500), netPaise: R(500) });
     expect(bd.byPurpose['personal'].netPaise).toBe(R(2000));
     expect(bd.totalNetPaise).toBe(R(2500));
+  });
+
+  it('a split expense counts only my own share under its purpose', () => {
+    // A ₹4,000 trip, split ₹2,000 to a friend + ₹2,000 my personal share.
+    const trip = txn({ type: 'expense', amountPaise: R(4000), accountId: 'bank', categoryId: 'travel', purposeId: 'personal' });
+    const splits = [
+      split(trip.id, { amountPaise: R(2000), personId: 'friend' }), // friend's share — excluded
+      split(trip.id, { amountPaise: R(2000) }), // my share — inherits the txn's 'personal' purpose
+    ];
+
+    // The helper returns only MY ₹2,000, falling back to the txn's purpose.
+    expect(txnGrossForPurpose(trip, splits, 'personal')).toBe(R(2000));
+    expect(txnGrossForPurpose(trip, splits, 'personal')).toBeLessThan(trip.amountPaise);
+    // Nothing lands under an unrelated purpose, and a txn with no splits is whole.
+    expect(txnGrossForPurpose(trip, splits, 'office')).toBe(0);
+    expect(txnGrossForPurpose(trip, [], 'personal')).toBe(R(4000));
+
+    // …and the breakdown's purpose Gross agrees — the drill-down line matches the row.
+    const bd = spendBreakdown(input({ transactions: [trip], splits }), FULL_YEAR);
+    expect(bd.byPurpose['personal'].grossPaise).toBe(txnGrossForPurpose(trip, splits, 'personal'));
+    expect(bd.byPurpose['personal'].grossPaise).toBe(R(2000));
   });
 
   it('a refund reduces its category’s net', () => {
