@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { Wallet, TrendingDown, PieChart, Target, CalendarRange, Briefcase, ChevronRight, Plus, Trash2, ArrowRight } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
 import type { Snapshot } from '../engine';
-import { spendBreakdown, eventBreakdown, budgetProgress, budgetActual, getTxnType } from '../engine';
+import { spendBreakdown, eventBreakdown, budgetProgress, budgetActual, getTxnType, txnGrossForPurpose } from '../engine';
 import type { Budget, BudgetScope } from '../db/types';
 import { addMonths, endOfMonth, startOfMonth, inRange, type DateRange } from '../lib/dates';
 import { buildLookups } from '../app/lookups';
@@ -182,15 +182,28 @@ function Trends({ eInput, range, bd, look, dataset }: { eInput: { transactions: 
 function ByPurpose({ bd, look, dataset, range }: { bd: BD; look: Look; dataset: Dataset; range: DateRange }) {
   const app = useApp();
   const [exp, setExp] = useState<string | null>(null);
+  const splitsByTxn = useMemo(() => {
+    const m = new Map<string, Dataset['splits']>();
+    for (const s of dataset.splits) {
+      const arr = m.get(s.txnId) ?? [];
+      arr.push(s);
+      m.set(s.txnId, arr);
+    }
+    return m;
+  }, [dataset.splits]);
   const rows = Object.entries(bd.byPurpose).filter(([, v]) => v.grossPaise > 0).sort((a, b) => b[1].grossPaise - a[1].grossPaise);
   const totalGross = rows.reduce((s, [, v]) => s + v.grossPaise, 0);
   const totalClaim = rows.reduce((s, [, v]) => s + v.claimablePaise, 0);
   const totalNet = rows.reduce((s, [, v]) => s + v.netPaise, 0);
   if (rows.length === 0) return <Card><EmptyState icon={Briefcase} title="No tagged spend yet" hint="Tag expenses with a purpose (Office / Personal) to see this split." /></Card>;
+  // My own share of each txn under this purpose — a split expense counts only my
+  // part, never the friend's, so these lines add up to the row's Gross total.
   const txnsFor = (pid: string) =>
     dataset.transactions
-      .filter((t) => !t.voided && EXPENSE_LIKE.has(t.type) && (t.purposeId ?? '') === pid && inRange(t.date, range.from, range.to))
-      .sort((a, b) => b.amountPaise - a.amountPaise);
+      .filter((t) => !t.voided && EXPENSE_LIKE.has(t.type) && inRange(t.date, range.from, range.to))
+      .map((t) => ({ t, share: txnGrossForPurpose(t, splitsByTxn.get(t.id) ?? [], pid) }))
+      .filter(({ share }) => share > 0)
+      .sort((a, b) => b.share - a.share);
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
@@ -227,13 +240,16 @@ function ByPurpose({ bd, look, dataset, range }: { bd: BD; look: Look; dataset: 
                           <div className="text-[11.5px] text-muted">No individual transactions in this period.</div>
                         ) : (
                           <div className="divide-y divide-line/70">
-                            {txns.map((t) => (
+                            {txns.map(({ t, share }) => (
                               <button key={t.id} onClick={() => app.openEditor({ txnId: t.id })} className="flex w-full items-center gap-3 py-1.5 text-left hover:opacity-80">
                                 <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: t.categoryId ? look.catColor(t.categoryId) : MONEY.transfer }} />
                                 <span className="min-w-0 flex-1 truncate font-medium text-ink">{t.description || getTxnType(t.type)?.label}</span>
                                 <span className="hidden shrink-0 text-[11px] text-grey sm:inline">{t.categoryId ? look.catName(t.categoryId) : ''}</span>
                                 <span className="shrink-0 text-[11px] text-grey">{fmtDate(t.date)}</span>
-                                <span className="tnum w-24 shrink-0 text-right font-bold text-money-out">{fmtINR(t.amountPaise)}</span>
+                                <span className="tnum flex w-24 shrink-0 flex-col items-end leading-tight">
+                                  <span className="font-bold text-money-out">{fmtINR(share)}</span>
+                                  {share < t.amountPaise && <span className="text-[10.5px] font-normal text-grey">of {fmtINR(t.amountPaise)}</span>}
+                                </span>
                               </button>
                             ))}
                           </div>
