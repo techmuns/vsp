@@ -14,6 +14,7 @@ import { CreatableSelect } from '../quickadd/CreatableSelect';
 import { AccountCreateForm, InvestmentCreateForm } from '../quickadd/createForms';
 import { SplitEditor, type SplitRow } from '../quickadd/SplitEditor';
 import type { EditorArg } from '../../app/context';
+import { isOfficePurpose } from '../../app/lookups';
 
 interface Draft {
   type: string;
@@ -117,6 +118,13 @@ export function TxnEditor({ open, arg, dataset, onClose, defaultAccountId: selec
   const fields = def?.fields ?? {};
   const isIncomeKind = d.type === 'income' || d.type === 'refund' || d.type === 'reimbursement_receipt' || d.type === 'investment_dividend';
   const accentColor = def?.color ?? MONEY.net;
+
+  // Setting the purpose to an Office one defaults "Claim this back" ON — a smart
+  // default the user can still switch off. Expense-like entries only.
+  const purposePatch = (purposeId: string): Partial<Draft> => ({
+    purposeId,
+    ...(!isIncomeKind && isOfficePurpose(dataset.purposes, purposeId) ? { reimbursable: true } : {}),
+  });
 
   const accountOpts: Option[] = useMemo(
     () => dataset.accounts.filter((a) => a.active).map((a) => ({ value: a.id, label: a.name, hint: a.institution, color: a.colorKey })),
@@ -302,7 +310,7 @@ export function TxnEditor({ open, arg, dataset, onClose, defaultAccountId: selec
             {fields.category && !d.splitMode && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Category">
-                  <CreatableSelect value={d.categoryId} onChange={(v) => { const dp = dataset.categories.find((c) => c.id === v)?.defaultPurposeId; setD((p) => ({ ...p, categoryId: v, ...(dp ? { purposeId: dp } : {}) })); }} options={categoryOpts} placeholder="Pick" createNoun="category" onCreate={async (name) => (await saveCategory({ name, kind: isIncomeKind ? 'income' : 'expense' })).id} />
+                  <CreatableSelect value={d.categoryId} onChange={(v) => { const dp = dataset.categories.find((c) => c.id === v)?.defaultPurposeId; setD((p) => ({ ...p, categoryId: v, ...(dp ? purposePatch(dp) : {}) })); }} options={categoryOpts} placeholder="Pick" createNoun="category" onCreate={async (name) => (await saveCategory({ name, kind: isIncomeKind ? 'income' : 'expense' })).id} />
                 </Field>
                 <Field label="Subcategory">
                   {d.categoryId ? (
@@ -323,7 +331,7 @@ export function TxnEditor({ open, arg, dataset, onClose, defaultAccountId: selec
 
             {fields.category && !d.splitMode && (
               <Field label="Purpose" hint="Office / Personal — auto-fills from the category; change it only if needed.">
-                <CreatableSelect value={d.purposeId} onChange={(v) => set('purposeId', v)} options={purposeOpts} placeholder="Office / Personal…" createNoun="purpose" onCreate={async (name) => (await savePurpose({ name })).id} />
+                <CreatableSelect value={d.purposeId} onChange={(v) => setD((p) => ({ ...p, ...purposePatch(v) }))} options={purposeOpts} placeholder="Office / Personal…" createNoun="purpose" onCreate={async (name) => (await savePurpose({ name })).id} />
               </Field>
             )}
 

@@ -1,7 +1,16 @@
 import { Landmark, Wallet, CreditCard, LineChart, Circle, type LucideIcon } from 'lucide-react';
 import type { Dataset } from '../db/hooks';
-import type { Account, AccountType } from '../db/types';
+import type { Account, AccountType, Purpose } from '../db/types';
 import { colorForId, MONEY } from '../lib/brand';
+
+/** A purpose counts as "Office" (work spend) when its name reads office — the
+ *  same name test the Reimbursements page uses to tally official spend. Used
+ *  to default "Claim this back" on for office expenses. */
+export function isOfficePurpose(purposes: Pick<Purpose, 'id' | 'name'>[], purposeId?: string): boolean {
+  if (!purposeId) return false;
+  const p = purposes.find((x) => x.id === purposeId);
+  return !!p && /office/i.test(p.name);
+}
 
 export interface Lookups {
   accountById: Map<string, Account>;

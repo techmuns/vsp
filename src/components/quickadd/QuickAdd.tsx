@@ -11,6 +11,7 @@ import { AmountField, Button, DateField, Dropdown, Field, TextArea, TextField, T
 import { CreatableSelect } from './CreatableSelect';
 import { AccountCreateForm, InvestmentCreateForm } from './createForms';
 import { SplitEditor, type SplitRow } from './SplitEditor';
+import { isOfficePurpose } from '../../app/lookups';
 
 const FRIENDLY: { id: string; label: string }[] = [
   { id: 'expense', label: 'Spent' },
@@ -88,6 +89,13 @@ export function QuickAdd({ open, prefill, onClose, dataset, defaultAccountId: se
   const def = getTxnType(d.type);
   const fields = def?.fields ?? {};
   const isIncomeKind = d.type === 'income' || d.type === 'refund' || d.type === 'reimbursement_receipt';
+
+  // Setting the purpose to an Office one defaults "Claim this back" ON — a smart
+  // default the user can still switch off. Expense-like entries only.
+  const purposePatch = (purposeId: string): Partial<Draft> => ({
+    purposeId,
+    ...(!isIncomeKind && isOfficePurpose(dataset.purposes, purposeId) ? { reimbursable: true } : {}),
+  });
 
   // option lists (active only)
   const accountOpts: Option[] = useMemo(
@@ -307,7 +315,7 @@ export function QuickAdd({ open, prefill, onClose, dataset, defaultAccountId: se
               <Field label="Category">
                 <CreatableSelect
                   value={d.categoryId}
-                  onChange={(v) => { const dp = dataset.categories.find((c) => c.id === v)?.defaultPurposeId; setD((p) => ({ ...p, categoryId: v, ...(dp ? { purposeId: dp } : {}) })); }}
+                  onChange={(v) => { const dp = dataset.categories.find((c) => c.id === v)?.defaultPurposeId; setD((p) => ({ ...p, categoryId: v, ...(dp ? purposePatch(dp) : {}) })); }}
                   options={categoryOpts}
                   placeholder="Pick a category"
                   createNoun="category"
@@ -347,7 +355,7 @@ export function QuickAdd({ open, prefill, onClose, dataset, defaultAccountId: se
               )}
 
               <Field label="Purpose">
-                <CreatableSelect value={d.purposeId} onChange={(v) => set('purposeId', v)} options={purposeOpts} placeholder="Office / Personal…" createNoun="purpose" onCreate={async (name) => (await savePurpose({ name })).id} />
+                <CreatableSelect value={d.purposeId} onChange={(v) => setD((p) => ({ ...p, ...purposePatch(v) }))} options={purposeOpts} placeholder="Office / Personal…" createNoun="purpose" onCreate={async (name) => (await savePurpose({ name })).id} />
               </Field>
 
               {(def?.group === 'spend' || def?.group === 'card' || isIncomeKind) && (
