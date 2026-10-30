@@ -128,6 +128,26 @@ describe('§5 classification rules', () => {
     expect(snap.reimb.outstandingPaise).toBe(R(-5000)); // receiving reduces outstanding
   });
 
+  it('11. an advance a friend pre-pays is cash in and grows what you owe them — exactly like borrowing, never income', () => {
+    const e = classifyTxn(
+      txn({ type: 'advance_received', amountPaise: R(2000), accountId: 'bank', personId: 'friend' }),
+      [],
+      NO_CTX
+    );
+    expect(e.account['bank']).toBe(R(2000)); // cash in
+    expect(e.payable['friend']).toBe(R(2000)); // you now owe them (will cover their expense)
+    expect(e.income).toBe(0); // not income
+    expect(e.receivable['friend']).toBeUndefined();
+
+    // It must behave identically to 'borrowed'.
+    const borrowed = classifyTxn(
+      txn({ type: 'borrowed', amountPaise: R(2000), accountId: 'bank', personId: 'friend' }),
+      [],
+      NO_CTX
+    );
+    expect(e).toEqual(borrowed);
+  });
+
   it('10. a repayment today links to an earlier loan, lifts today’s cash, lowers the outstanding — original untouched', () => {
     const loan = txn({ id: 'loan1', type: 'lent', amountPaise: R(1000), accountId: 'bank', personId: 'friend', date: '2026-09-01' });
     const repay = txn({ type: 'loan_repayment_received', amountPaise: R(400), accountId: 'bank', personId: 'friend', date: '2026-10-11', linkedTxnId: 'loan1' });
