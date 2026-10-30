@@ -300,6 +300,23 @@ registerTxnType({
 });
 
 registerTxnType({
+  id: 'advance_received',
+  label: 'Advance received',
+  group: 'people',
+  direction: 'in',
+  color: MONEY.payable,
+  fields: F.person,
+  // A friend pre-pays you for an expense you'll cover for them. Like 'borrowed':
+  // cash comes in now and you owe it back (settled by the spend you make for them).
+  classify: (txn) => {
+    const e = emptyEffect();
+    if (txn.accountId) bump(e.account, txn.accountId, txn.amountPaise);
+    if (txn.personId) bump(e.payable, txn.personId, txn.amountPaise);
+    return e;
+  },
+});
+
+registerTxnType({
   id: 'loan_repayment_received',
   label: 'Got money back',
   group: 'people',
